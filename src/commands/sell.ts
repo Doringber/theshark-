@@ -46,6 +46,14 @@ export interface SellOptions {
   noDryRun?: boolean;
   /** Attach to running Chrome via CDP instead of launching a profile */
   cdpUrl?: string;
+  /** Prepare the draft and leave the browser open for manual review — never submit */
+  draftOnly?: boolean;
+  /** Yad2 product-type query for the real form's autocomplete (e.g. "מחשב נייד") */
+  yad2Type?: string;
+  /** Yad2 manufacturer as listed there (e.g. "Apple") */
+  yad2Brand?: string;
+  /** WhatsApp chats/groups to send to (exact names as shown in WhatsApp) */
+  waTo?: string[];
 }
 
 export interface SellResult {
@@ -442,6 +450,14 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
     ) {
       adapter.targetGroups = options.groups;
     }
+    if (adapter instanceof Yad2Adapter) {
+      if (options.yad2Type) adapter.productType = options.yad2Type;
+      if (options.yad2Brand) adapter.brand = options.yad2Brand;
+      adapter.address = config.seller;
+    }
+    if (adapter instanceof WhatsAppWebAdapter && options.waTo && options.waTo.length > 0) {
+      adapter.targetChats = options.waTo;
+    }
 
     if (isDryRun) {
       console.log(`  📋 Would prepare draft on ${platform}`);
@@ -473,11 +489,16 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
         headed: true,
         cdpUrl: options.cdpUrl ?? "",
       });
-      const page = await session.getPage();
+      // WhatsApp Web permits a single active tab — reuse it if already open.
+      const page = await session.getPage(
+        platform === "whatsapp" ? { reuseUrlIncludes: "web.whatsapp.com" } : {},
+      );
 
-      // Navigate to platform
+      // Navigate to platform (skip if we're reusing a tab already on it)
       const platformConfig = config.platforms[platform];
-      await page.goto(platformConfig.url, { waitUntil: "domcontentloaded" });
+      if (!page.url().startsWith(platformConfig.url)) {
+        await page.goto(platformConfig.url, { waitUntil: "domcontentloaded" });
+      }
 
       // Check login
       const loginState = await adapter.verifyLogin(page);
@@ -542,6 +563,9 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       // Preview
       const preview = await adapter.preview(page);
       console.log(`  📋 Preview: "${preview.title}" at ₪${preview.price}`);
+      if (adapter instanceof Yad2Adapter && adapter.reviewNotes.length > 0) {
+        for (const note of adapter.reviewNotes) console.log(`  ⚠️  Review: ${note}`);
+      }
 
       // Per-destination approval (groups expand the destination binding)
       const baseDestination = preview.destinations[0] ?? platform;
@@ -580,6 +604,27 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
         platform,
         destination,
       });
+
+      // Draft-only: leave the filled form open for manual review, no submit.
+      if (options.draftOnly) {
+        console.log(`  📝 Draft ready on ${destination} — tab left open for your review`);
+        console.log("     Check the form, then publish manually or close the tab.\n");
+        results.push({
+          status: "skipped",
+          destination,
+          message: "Draft prepared, left open for manual review — not submitted",
+        });
+        await store.updateDestinationStatus(run.id, platform, destination, "skipped");
+        if (session.isAttached()) {
+          // Shared Shark Chrome: detach and keep the tab; continue to next platform.
+          await session.detach();
+          session = null;
+          continue;
+        }
+        console.log("     Press Ctrl+C here when you are done.\n");
+        printSummary(run, results, isDryRun);
+        await new Promise(() => {});
+      }
 
       // Submit
       console.log(`  🚀 Submitting to ${destination}...`);

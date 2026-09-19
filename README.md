@@ -2,7 +2,30 @@
 
 Local CLI tool for preparing and cross-posting second-hand product listings to **Facebook Marketplace**, **WhatsApp groups**, and **Yad2**.
 
-> **Phase 1** — Dry-run is the default. Nothing is ever published without `--publish` **and** explicit interactive approval.
+> Dry-run is the default. Nothing is ever published without `--publish` **and** explicit approval.
+
+## One shared, logged-in Chrome window
+
+Shark never opens throwaway browsers. Every command attaches (over CDP, `localhost:9222`) to a
+single **Shark Chrome** window with its own persistent profile at `~/.shark/chrome`. You log in to
+Facebook, WhatsApp and Yad2 there **once**; from then on every `sell` run reuses those sessions and
+just opens a tab. If the window is closed, the next command relaunches it.
+
+```bash
+npm run dev -- browser                      # open / focus the window (also: ~/Applications/Shark Chrome.app)
+npm run dev -- auth --platform facebook     # open the site's tab for the one-time login
+npm run dev -- auth --platform whatsapp
+npm run dev -- auth --platform yad2
+```
+
+Why not your everyday Chrome? Since Chrome 136 the browser refuses remote debugging on the default
+profile, so attaching to it is impossible without relaunching it with debug flags every time.
+The shared Shark window gives the same result with a safer boundary. Sign it into your Google
+account (Chrome sync) if you want your bookmarks, passwords and extensions in it.
+
+All three adapters are mapped against the **live sites** (Sep 2026) and verified end-to-end:
+Facebook Marketplace + groups (published), WhatsApp (sent with photos + caption), Yad2 (full draft,
+you press "סיום והעלאה").
 
 ## Quick Start
 
@@ -25,21 +48,46 @@ npm run dev -- sell --image ./photos/item.jpg
 | ----------------------------------------- | --------------------------------------------------- |
 | `shark sell --image <paths...>`           | Run the interactive sale flow (dry-run by default)  |
 | `shark sell --image <paths...> --publish` | Enable the approval path for final submission       |
-| `shark auth --platform <name>`            | Open a platform and log in manually                 |
+| `shark browser [--url <url>]`             | Open / focus the shared Shark Chrome window         |
+| `shark auth --platform <name>`            | Open the platform tab in Shark Chrome for login     |
 | `shark inspect --platform <name>`         | Save a sanitized DOM snapshot of a platform page    |
 | `shark doctor`                            | Check Node, browser, config, and credentials        |
 | `shark configure`                         | Save platform URLs, language, city, browser profile |
 
+### `sell` flags (non-interactive / agent use)
+
+| Flag                                                   | Meaning                                                                 |
+| ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `--title --price --description --condition --location` | Listing facts (skip prompts). Condition: `new,like_new,good,fair,poor`  |
+| `--platforms facebook,whatsapp,yad2`                   | Which platforms to run                                                  |
+| `--category "Electronics"` `--groups "A,B"`            | Facebook category and groups to cross-post to                           |
+| `--wa-to "Chat 1,Group 2"`                             | WhatsApp chats/groups (exact names) — photos + Hebrew caption           |
+| `--yad2-type "מחשבים ניידים"` `--yad2-brand Apple`     | Yad2 product type (their category name) and manufacturer                |
+| `--draft-only`                                         | Fill the form and leave the tab open for review — never submit          |
+| `--publish --auto-approve [--no-dry-run]`              | Real submission without prompts (agent mode)                            |
+| `--cdp <url>`                                          | CDP endpoint (default shared Shark Chrome; `none` = legacy own profile) |
+
+Example — real MacBook run used during development:
+
+```bash
+npm run dev -- sell --image p1.jpg --image p2.jpg --image p3.jpg \
+  --title "מקבוק אייר 2015 13 אינץ'" --price 300 --condition good --location "מודיעין מכבים רעות" \
+  --description "עובד מצוין, סוללה במצב טוב. איסוף עצמי." \
+  --platforms whatsapp,yad2 --wa-to "+972 50-732-8808" \
+  --yad2-type "מחשבים ניידים" --yad2-brand Apple --draft-only --publish --auto-approve
+```
+
 ## Configuration
 
-Edit `shark.config.json`:
+`shark.config.json` is git-ignored (it holds your pickup address); start from
+`shark.config.example.json`:
 
 ```json
 {
   "language": "he",
   "dryRun": true,
   "currency": "NIS",
-  "browserProfilePath": "~/.shark/browser-profile",
+  "seller": { "city": "תל אביב יפו", "street": "דיזנגוף", "houseNumber": "1" },
   "platforms": {
     "facebook": { "enabled": true, "url": "https://www.facebook.com" },
     "whatsapp": { "enabled": true, "url": "https://web.whatsapp.com" },
@@ -73,7 +121,7 @@ src/
 │   ├── run-store.ts                # Local file-based RunRecord persistence
 │   └── redaction.ts                # PII/secret sanitization for logs & snapshots
 ├── browser/
-│   ├── session.ts                  # Playwright persistent-profile session
+│   ├── session.ts                  # Attaches to the shared Shark Chrome (CDP); launches it if needed
 │   ├── safe-navigation.ts          # Host-validated navigation with redirect blocking
 │   ├── login-detector.ts           # Visibility-based login state detection
 │   └── snapshot.ts                 # Sanitized accessibility tree capture
@@ -95,17 +143,36 @@ Each adapter implements the `PlatformAdapter` interface:
 | `preview(page)`               | Read back filled values for user confirmation         |
 | `submit(page, approval)`      | Click publish/send — only with a valid approval token |
 
-### Facebook Marketplace
+### Facebook Marketplace (live)
 
-Home → Marketplace → Create new listing → Item for sale → fill title/price/description/photos → Next → select destinations → Publish
+`/marketplace/create/item` → photos, title, price, category (dialog), condition, description →
+Next → destination step: Marketplace + selected groups, Boost off → Publish → success when the URL
+moves to `/marketplace/you` or "listing is live" appears.
 
-### WhatsApp Web
+### WhatsApp Web (live)
 
-Groups filter → collect group names → identify sale groups (Hebrew keywords) → open group → attach photos + compose message → per-group approval → Send
+Reuses the single WhatsApp tab (WhatsApp allows one). Sidebar search `#side input[role=textbox]` →
+`#pane-side span[title="<exact name>"]` → Attach → "Photos & videos" (file chooser) → caption
+(Shift+Enter for line breaks) → `Send`. Every chat is verified to exist before anything is sent.
 
-### Yad2
+### Yad2 (live)
 
-Home → מוצרים → פרטי (never מנוי עסקי) → fill כותרת/מחיר/תיאור/עיר/תמונות → פרסום
+`/publish-ad-products/create` (stable `data-testid`s). "Resume draft?" is always answered with
+"התחלה מחדש". Photos → title → product type (autocomplete) → manufacturer (menu) → description →
+condition toggle → price → contact modal: city / street / house number (all pick-from-list) →
+terms checkbox. `--draft-only` stops there; otherwise `סיום והעלאה`. An hCaptcha ("Are you for real?")
+is handed to the user, never bypassed.
+
+## Claude Code plugin
+
+The repo doubles as a Claude Code plugin (`.claude-plugin/plugin.json`): the `shark-sell` skill
+carries the operating rules and site knowledge, and `/shark-sell`, `/shark-browser` are slash
+commands. Install from a local clone:
+
+```
+/plugin marketplace add /path/to/theshark-
+/plugin install shark
+```
 
 ## Development
 
@@ -147,6 +214,6 @@ Integration tests run against local HTML fixtures served on `localhost:4173` —
 - **Runtime:** Node.js 20+, TypeScript 6
 - **CLI:** Commander
 - **Validation:** Zod 4
-- **Browser:** Playwright (Chromium, persistent profiles)
+- **Browser:** Playwright over CDP → shared Google Chrome window (`~/.shark/chrome`)
 - **Testing:** Vitest + Playwright Test
 - **Linting:** ESLint + typescript-eslint + Prettier

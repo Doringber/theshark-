@@ -23,18 +23,53 @@ const SALE_GROUP_KEYWORDS = [
   "selling",
 ];
 
+function isRealWhatsApp(page: Page): boolean {
+  return page.url().includes("web.whatsapp.com");
+}
+
+/** Build the short sale message posted to each chat */
+export function buildWhatsAppMessage(listing: ApprovedListing): string {
+  const lines = [`למכירה: ${listing.title}`, `מחיר: ₪${listing.price}`];
+  if (listing.location) lines.push(`איסוף: ${listing.location}`);
+  if (listing.description) lines.push("", listing.description);
+  return lines.join("\n");
+}
+
 export class WhatsAppWebAdapter extends BasePlatformAdapter {
   readonly name = "whatsapp" as const;
 
+  /** Exact chat/group names (as shown in WhatsApp) to send the listing to */
+  targetChats: string[] = [];
+
+  /** Listing captured in prepareDraft so submit can post to every target chat */
+  private pendingListing: ApprovedListing | null = null;
+  private pendingFiles: string[] = [];
+
   async verifyLogin(page: Page): Promise<"logged_in" | "login_required" | "unknown"> {
+    // Real Web: sidebar search box exists only when logged in. The app is a
+    // heavy SPA — give it a moment to render before deciding.
+    const realSearch = page.locator('#side input[role="textbox"]').first();
+    const qrCanvas = page.locator('canvas[aria-label*="QR" i], [data-ref]').first();
+    if (isRealWhatsApp(page)) {
+      // "WhatsApp is open in another window" — claim this tab.
+      await page
+        .getByRole("button", { name: "Use here" })
+        .click({ timeout: 3_000 })
+        .catch(() => {});
+      await realSearch
+        .or(qrCanvas)
+        .first()
+        .waitFor({ state: "visible", timeout: 20_000 })
+        .catch(() => {});
+    }
+    if (await realSearch.isVisible().catch(() => false)) return "logged_in";
+    if (await qrCanvas.isVisible().catch(() => false)) return "login_required";
+
+    // Fixture
     const chat = page.locator('[aria-label="Chat"]').first();
     if (await chat.isVisible().catch(() => false)) return "logged_in";
-
-    const qr = page.locator('[aria-label="QR Login"]').first();
+    const qr = page.locator('[aria-label="QR Login"], [data-testid="qr-code"]').first();
     if (await qr.isVisible().catch(() => false)) return "login_required";
-
-    const qrCode = page.locator('[data-testid="qr-code"]').first();
-    if (await qrCode.isVisible().catch(() => false)) return "login_required";
 
     return "unknown";
   }
@@ -76,7 +111,31 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
         return { success: false, error: manifestCheck.reason };
       }
 
-      // Verify we can see the chat view
+      if (isRealWhatsApp(page)) {
+        if (this.targetChats.length === 0) {
+          return {
+            success: false,
+            needsMapping: true,
+            error: "No WhatsApp chats selected — pass --wa-to with exact chat/group names",
+          };
+        }
+        // Verify every target chat exists before anything is sent anywhere.
+        for (const chat of this.targetChats) {
+          const found = await this.openChat(page, chat);
+          if (!found) {
+            return {
+              success: false,
+              needsMapping: true,
+              error: `WhatsApp chat "${chat}" not found — check the exact name`,
+            };
+          }
+        }
+        this.pendingListing = listing;
+        this.pendingFiles = uploadable.map((img) => img.path);
+        return { success: true };
+      }
+
+      // Fixture: verify we can see the chat view
       const chatView = page.locator('[aria-label="Chat"]').first();
       if (!(await chatView.isVisible().catch(() => false))) {
         return {
@@ -93,7 +152,54 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
     }
   }
 
-  /** Open a specific group and prepare the message */
+  /** Real Web: search the sidebar and open a chat by exact title */
+  private async openChat(page: Page, chatName: string): Promise<boolean> {
+    const search = page.locator('#side input[role="textbox"]').first();
+    await search.click();
+    await search.fill("");
+    await search.fill(chatName);
+    const row = page.locator(`#pane-side span[title="${chatName.replace(/"/g, '\\"')}"]`).first();
+    try {
+      await row.waitFor({ state: "visible", timeout: 8_000 });
+    } catch {
+      await page.keyboard.press("Escape");
+      return false;
+    }
+    await row.click();
+    const composer = page.locator('#main [role="textbox"]').first();
+    await composer.waitFor({ state: "visible", timeout: 8_000 });
+    return true;
+  }
+
+  /** Real Web: attach photos, type caption, press Send in the open chat */
+  private async sendToOpenChat(page: Page, text: string, files: string[]): Promise<boolean> {
+    await page.locator('#main [aria-label="Attach"]').click();
+    const photos = page.getByRole("menuitem", { name: "Photos & videos" });
+    await photos.waitFor({ state: "visible", timeout: 5_000 });
+    const [chooser] = await Promise.all([page.waitForEvent("filechooser"), photos.click()]);
+    await chooser.setFiles(files);
+
+    const sendBtn = page.locator('[role="button"][aria-label^="Send"]').first();
+    await sendBtn.waitFor({ state: "visible", timeout: 15_000 });
+
+    const caption = page.locator('[role="textbox"][aria-placeholder="Type a message"]').first();
+    await caption.waitFor({ state: "visible", timeout: 5_000 });
+    await caption.click();
+    // Multi-line caption: Shift+Enter keeps it in the box, Enter would send.
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) await page.keyboard.press("Shift+Enter");
+      const line = lines[i] ?? "";
+      if (line) await page.keyboard.insertText(line);
+    }
+
+    await sendBtn.click();
+    // Preview closes once the message is queued.
+    await sendBtn.waitFor({ state: "hidden", timeout: 15_000 });
+    return true;
+  }
+
+  /** Open a specific group and prepare the message (fixture flow) */
   async prepareGroupMessage(
     page: Page,
     groupName: string,
@@ -102,7 +208,6 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
     try {
       const uploadable = getUploadableImages(listing.images);
 
-      // Click the group
       const groupItem = page.locator(
         `[data-testid="group-item"][aria-label="${groupName}"]`,
       );
@@ -115,21 +220,17 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
       }
       await groupItem.click();
 
-      // Wait for conversation view
       const conversation = page.locator('[aria-label="Group conversation"]');
       await conversation.waitFor({ state: "visible", timeout: 5000 });
 
-      // Set attachment files
       const attachInput = page.locator("#attachment-input");
       if (await attachInput.count()) {
         const filePaths = uploadable.map((img) => img.path);
         await attachInput.setInputFiles(filePaths);
       }
 
-      // Type the message
       const messageInput = page.locator('[aria-label="Type a message"]');
       if (await messageInput.isVisible().catch(() => false)) {
-        // Build short WhatsApp message
         const msg = `למכירה ${listing.title}, מחיר ₪${listing.price}, ${listing.location}`;
         await messageInput.fill(msg);
       }
@@ -142,6 +243,17 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
   }
 
   async preview(page: Page): Promise<PlatformPreview> {
+    if (isRealWhatsApp(page) && this.pendingListing) {
+      return {
+        platform: "whatsapp",
+        title: this.targetChats.join(", "),
+        description: buildWhatsAppMessage(this.pendingListing),
+        price: String(this.pendingListing.price),
+        images: [],
+        destinations: [this.targetChats.join(",")],
+      };
+    }
+
     const groupName =
       (await page
         .locator("#group-name")
@@ -164,13 +276,57 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
   }
 
   async submit(page: Page, approval: ApprovalToken): Promise<SubmissionResult> {
+    if (isRealWhatsApp(page)) {
+      const destination = this.targetChats.join(",");
+      const validationResult = validateApproval(approval, {
+        runId: approval?.runId ?? "",
+        listingId: approval?.listingId ?? "",
+        platform: "whatsapp",
+        destination,
+      });
+      if (!validationResult.valid) {
+        return {
+          status: "failed",
+          destination,
+          message: `Approval rejected: ${validationResult.reason}`,
+        };
+      }
+      if (!this.pendingListing) {
+        return { status: "failed", destination, message: "prepareDraft was not run" };
+      }
+
+      const text = buildWhatsAppMessage(this.pendingListing);
+      const sent: string[] = [];
+      for (const chat of this.targetChats) {
+        try {
+          if (!(await this.openChat(page, chat))) {
+            return {
+              status: "failed",
+              destination,
+              message: `Chat "${chat}" disappeared before sending (sent so far: ${sent.join(", ") || "none"})`,
+            };
+          }
+          await this.sendToOpenChat(page, text, this.pendingFiles);
+          sent.push(chat);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message.split("\n")[0] : String(error);
+          return {
+            status: "unknown_submission_state",
+            destination,
+            message: `Error on "${chat}": ${msg} (sent so far: ${sent.join(", ") || "none"})`,
+          };
+        }
+      }
+      return { status: "published", destination, message: `Sent to ${sent.join(", ")}` };
+    }
+
+    // Fixture flow
     const groupName =
       (await page
         .locator("#group-name")
         .textContent()
         .catch(() => "")) || "";
 
-    // Validate the approval for this exact group
     const validationResult = validateApproval(approval, {
       runId: approval?.runId ?? "",
       listingId: approval?.listingId ?? "",
@@ -186,7 +342,6 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
       };
     }
 
-    // Click Send
     const sendBtn = page.getByRole("button", { name: "Send" });
     if (!(await sendBtn.isVisible().catch(() => false))) {
       return {
@@ -198,7 +353,6 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
 
     await sendBtn.click();
 
-    // Check result
     const status = await page.locator("#send-status").textContent();
     if (status === "sent") {
       return { status: "published", destination: groupName };

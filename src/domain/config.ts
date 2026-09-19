@@ -94,12 +94,21 @@ const PlatformConfigSchema = z.object({
   url: z.string(),
 });
 
+/** Seller pickup address — used to fill Yad2's contact modal (only the city is published) */
+export const SellerAddressSchema = z.object({
+  city: z.string().optional(),
+  street: z.string().optional(),
+  houseNumber: z.string().optional(),
+});
+export type SellerAddress = z.infer<typeof SellerAddressSchema>;
+
 /** Full Shark configuration */
 export const SharkConfigSchema = z.object({
   language: z.enum(["he", "en", "both"]).default("he"),
   dryRun: z.boolean().default(true),
   currency: z.literal("NIS").default("NIS"),
   browserProfilePath: z.string().default("~/.shark/browser-profile"),
+  seller: SellerAddressSchema.default({}),
   platforms: z
     .object({
       facebook: PlatformConfigSchema.default({

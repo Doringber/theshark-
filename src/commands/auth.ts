@@ -56,6 +56,15 @@ export async function runAuth(options: AuthOptions): Promise<void> {
     });
     await page.bringToFront().catch(() => {});
 
+    // Shared Shark Chrome: leave the tab open, user logs in whenever they
+    // like — the login lives in the shared profile and every command reuses it.
+    if (session.isAttached()) {
+      console.log("🌐 Opened a tab in the shared Shark Chrome window.");
+      console.log("   Log in there (once). The tab stays open; Shark just detaches.\n");
+      await session.detach();
+      return;
+    }
+
     console.log("🌐 Browser opened. Please log in manually.");
     console.log("   Look for a Chromium window (separate Dock icon).");
     console.log("   The browser will stay open for you to complete login.");

@@ -1,0 +1,20 @@
+{
+  "name": "shark",
+  "description": "Cross-post second-hand listings to Facebook Marketplace (+groups), WhatsApp chats and Yad2 through one shared, logged-in Chrome window. Dry-run by default, per-destination approval, never fabricates selectors.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Dor Ingber"
+  },
+  "homepage": "https://github.com/Doringber/theshark-",
+  "repository": "https://github.com/Doringber/theshark-",
+  "license": "MIT",
+  "keywords": [
+    "marketplace",
+    "facebook",
+    "whatsapp",
+    "yad2",
+    "playwright",
+    "second-hand",
+    "israel"
+  ]
+}

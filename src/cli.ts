@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { runSell } from "./commands/sell.js";
+import { runWSend } from "./commands/wsend.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runAuth } from "./commands/auth.js";
 import { runInspect } from "./commands/inspect.js";
@@ -28,12 +29,32 @@ program
   });
 
 program
+  .command("browser")
+  .description("Open (or focus) the shared Shark Chrome window — log in to your accounts there once")
+  .option("--url <url>", "Page to open in a new tab")
+  .action(async (opts: { url?: string }) => {
+    const { ensureSharkChrome, SHARK_CHROME_DIR } = await import("./browser/session.js");
+    const cdp = await ensureSharkChrome();
+    if (!cdp) {
+      console.error("💀 Google Chrome not found at /Applications/Google Chrome.app");
+      process.exitCode = 1;
+      return;
+    }
+    if (opts.url) {
+      await fetch(`${cdp}/json/new?${encodeURIComponent(opts.url)}`, { method: "PUT" }).catch(() => {});
+    }
+    const { execFile } = await import("node:child_process");
+    execFile("osascript", ["-e", 'tell application "Google Chrome" to activate']);
+    console.log(`🦈 Shark Chrome is running (${cdp})\n   Profile: ${SHARK_CHROME_DIR}`);
+  });
+
+program
   .command("auth")
   .description("Open a platform and let the user log in manually")
   .requiredOption("--platform <name>", "Platform name: facebook, whatsapp, yad2")
   .option("--timeout <ms>", "How long to keep browser open (ms)", "300000")
   .option("--auto-close", "Auto-close when login detected")
-  .option("--cdp <url>", "Attach to your running Chrome (needs --remote-debugging-port)")
+  .option("--cdp <url>", "CDP URL to attach to (default: shared Shark Chrome on localhost:9222; \"none\" = own profile)")
   .action(async (opts: { platform: string; timeout: string; autoClose?: boolean; cdp?: string }) => {
     try {
       await runAuth({
@@ -56,7 +77,7 @@ program
   .option("--url <url>", "Specific URL to inspect (overrides platform default)")
   .option("--output <path>", "Save snapshot to this path")
   .option("--wait <ms>", "Wait time before capturing (ms)", "3000")
-  .option("--cdp <url>", "Attach to your running Chrome (needs --remote-debugging-port)")
+  .option("--cdp <url>", "CDP URL to attach to (default: shared Shark Chrome on localhost:9222; \"none\" = own profile)")
   .action(
     async (opts: {
       platform: string;
@@ -96,7 +117,11 @@ program
   .option("--location <location>", "City/area (skip interactive prompt)")
   .option("--category <category>", "Facebook category, e.g. Furniture")
   .option("--groups <names>", "Comma-separated Facebook group names to cross-post to")
-  .option("--cdp <url>", "Attach to your running Chrome (needs --remote-debugging-port)")
+  .option("--yad2-type <name>", "Yad2 product type for the autocomplete, e.g. \"מחשב נייד\"")
+  .option("--yad2-brand <name>", "Yad2 manufacturer as listed there, e.g. Apple")
+  .option("--wa-to <names>", "Comma-separated WhatsApp chat/group names to send to")
+  .option("--draft-only", "Fill the form and leave the tab open for review — never submit")
+  .option("--cdp <url>", "CDP URL to attach to (default: shared Shark Chrome on localhost:9222; \"none\" = own profile)")
   .option(
     "--platforms <platforms>",
     "Comma-separated platforms: facebook,whatsapp,yad2",
@@ -118,6 +143,10 @@ program
       location?: string;
       category?: string;
       groups?: string;
+      yad2Type?: string;
+      yad2Brand?: string;
+      waTo?: string;
+      draftOnly?: boolean;
       platforms?: string;
       analysisOnly?: string;
       cdp?: string;
@@ -137,6 +166,10 @@ program
           location: opts.location,
           category: opts.category,
           groups: opts.groups?.split(",").map((s) => s.trim()).filter(Boolean),
+          yad2Type: opts.yad2Type,
+          yad2Brand: opts.yad2Brand,
+          waTo: opts.waTo?.split(",").map((s) => s.trim()).filter(Boolean),
+          draftOnly: opts.draftOnly ?? false,
           platforms: opts.platforms?.split(",").map((s) => s.trim()) as
             Array<"facebook" | "whatsapp" | "yad2"> | undefined,
           analysisOnlyIndices: opts.analysisOnly
@@ -150,5 +183,28 @@ program
       }
     },
   );
+
+program
+  .command("wsend")
+  .description("Send a WhatsApp message via your already-open Chrome (no Shark browser)")
+  .requiredOption("--to <phone>", "Recipient phone (05x... or international)")
+  .option("--text <text>", "Message text")
+  .option("--image <path>", "Image to attach (.jpg/.png)")
+  .option("--wait <seconds>", "Seconds to wait for chat load", "12")
+  .action(async (opts: { to: string; text?: string; image?: string; wait: string }) => {
+    try {
+      const result = await runWSend({
+        to: opts.to,
+        text: opts.text,
+        image: opts.image,
+        waitSeconds: parseInt(opts.wait, 10),
+      });
+      console.log(`\n⚠️ ${result.status} — ${result.message}\n`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`\n💀 ${msg}`);
+      process.exitCode = 1;
+    }
+  });
 
 program.parse();

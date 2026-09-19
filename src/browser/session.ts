@@ -2,6 +2,56 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+
+/** Default CDP endpoint for the shared Shark Chrome window */
+export const SHARK_CDP_URL = "http://localhost:9222";
+/** Where the shared Shark Chrome keeps its logins (all platforms in one) */
+export const SHARK_CHROME_DIR = join(homedir(), ".shark", "chrome");
+const CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+
+async function cdpAlive(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${url}/json/version`, { signal: AbortSignal.timeout(1500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Make sure the shared Shark Chrome is running and reachable over CDP.
+ * Launches it (real Chrome, own persistent profile, debug port) if needed.
+ * Returns the CDP URL, or null if Chrome isn't installed.
+ */
+export async function ensureSharkChrome(url: string = SHARK_CDP_URL): Promise<string | null> {
+  if (await cdpAlive(url)) return url;
+  if (!existsSync(CHROME_BIN)) return null;
+
+  await mkdir(SHARK_CHROME_DIR, { recursive: true });
+  const port = new URL(url).port || "9222";
+  const child = spawn(
+    CHROME_BIN,
+    [
+      `--user-data-dir=${SHARK_CHROME_DIR}`,
+      `--remote-debugging-port=${port}`,
+      "--remote-debugging-address=127.0.0.1",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-blink-features=AutomationControlled",
+      "about:blank",
+    ],
+    { detached: true, stdio: "ignore" },
+  );
+  child.unref();
+
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (await cdpAlive(url)) return url;
+  }
+  return null;
+}
 
 export interface BrowserSessionOptions {
   /** Path to the persistent browser profile */
@@ -25,6 +75,7 @@ export interface BrowserSessionOptions {
 export class BrowserSession {
   private context: BrowserContext | null = null;
   private cdpBrowser: Browser | null = null;
+  private attached = false;
   private ownedPages: Page[] = [];
   private readonly options: Required<BrowserSessionOptions>;
 
@@ -46,18 +97,25 @@ export class BrowserSession {
       return this.context;
     }
 
-    // Attach mode — reuse the user's own running Chrome.
-    if (this.options.cdpUrl) {
+    // Attach mode (default) — reuse the shared Shark Chrome window. Chrome
+    // forbids attaching to a user's main profile, so this is the one window
+    // where the user logs in once per site and every command reuses it.
+    const cdpUrl =
+      this.options.cdpUrl === "none"
+        ? ""
+        : (this.options.cdpUrl || (await ensureSharkChrome()) || "");
+    if (cdpUrl) {
       try {
-        this.cdpBrowser = await chromium.connectOverCDP(this.options.cdpUrl);
+        this.cdpBrowser = await chromium.connectOverCDP(cdpUrl);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         throw new Error(
-          `Cannot attach to Chrome at "${this.options.cdpUrl}" (${msg}). ` +
+          `Cannot attach to Chrome at "${cdpUrl}" (${msg}). ` +
             "Relaunch Chrome with --remote-debugging-port first.",
           { cause: error },
         );
       }
+      this.attached = true;
       const contexts = this.cdpBrowser.contexts();
       this.context = contexts[0] ?? (await this.cdpBrowser.newContext());
       return this.context;
@@ -113,12 +171,17 @@ export class BrowserSession {
   }
 
   /** Get the current page or create a new one */
-  async getPage(): Promise<Page> {
+  async getPage(options: { reuseUrlIncludes?: string } = {}): Promise<Page> {
     const ctx = await this.launch();
-    // In attach mode always work in a fresh tab — never hijack the user's.
-    if (this.options.cdpUrl) {
-      const page = await ctx.newPage();
-      this.ownedPages.push(page);
+    // In attach mode work in a fresh tab — never hijack the user's — unless a
+    // tab for this site should be reused (e.g. WhatsApp Web allows one tab only).
+    if (this.attached) {
+      const existing = options.reuseUrlIncludes
+        ? ctx.pages().find((p) => p.url().includes(options.reuseUrlIncludes ?? ""))
+        : undefined;
+      const page = existing ?? (await ctx.newPage());
+      await page.bringToFront().catch(() => {});
+      if (!existing) this.ownedPages.push(page);
       return page;
     }
     const pages = ctx.pages();
@@ -147,6 +210,21 @@ export class BrowserSession {
   /** Check if the session is currently open */
   isOpen(): boolean {
     return this.context !== null;
+  }
+
+  /** True when reusing the shared Shark Chrome over CDP */
+  isAttached(): boolean {
+    return this.attached;
+  }
+
+  /** Attach mode only: disconnect and leave every tab open in the window */
+  async detach(): Promise<void> {
+    this.ownedPages = [];
+    if (this.cdpBrowser) {
+      await this.cdpBrowser.close().catch(() => {});
+      this.cdpBrowser = null;
+      this.context = null;
+    }
   }
 }
 
