@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -10,6 +10,12 @@ export interface BrowserSessionOptions {
   headed?: boolean;
   /** Additional Chromium launch args */
   args?: string[];
+  /**
+   * Attach to an already-running Chrome via CDP instead of launching a
+   * profile browser (e.g. "http://127.0.0.1:9222"). Shark opens a NEW TAB
+   * for its work and only closes tabs it created — your tabs stay intact.
+   */
+  cdpUrl?: string;
 }
 
 /**
@@ -18,12 +24,15 @@ export interface BrowserSessionOptions {
  */
 export class BrowserSession {
   private context: BrowserContext | null = null;
+  private cdpBrowser: Browser | null = null;
+  private ownedPages: Page[] = [];
   private readonly options: Required<BrowserSessionOptions>;
 
   constructor(options: BrowserSessionOptions) {
     this.options = {
       headed: true,
       args: [],
+      cdpUrl: "",
       ...options,
     };
   }
@@ -34,6 +43,23 @@ export class BrowserSession {
    */
   async launch(): Promise<BrowserContext> {
     if (this.context) {
+      return this.context;
+    }
+
+    // Attach mode — reuse the user's own running Chrome.
+    if (this.options.cdpUrl) {
+      try {
+        this.cdpBrowser = await chromium.connectOverCDP(this.options.cdpUrl);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Cannot attach to Chrome at "${this.options.cdpUrl}" (${msg}). ` +
+            "Relaunch Chrome with --remote-debugging-port first.",
+          { cause: error },
+        );
+      }
+      const contexts = this.cdpBrowser.contexts();
+      this.context = contexts[0] ?? (await this.cdpBrowser.newContext());
       return this.context;
     }
 
@@ -89,12 +115,29 @@ export class BrowserSession {
   /** Get the current page or create a new one */
   async getPage(): Promise<Page> {
     const ctx = await this.launch();
+    // In attach mode always work in a fresh tab — never hijack the user's.
+    if (this.options.cdpUrl) {
+      const page = await ctx.newPage();
+      this.ownedPages.push(page);
+      return page;
+    }
     const pages = ctx.pages();
     return pages[0] ?? (await ctx.newPage());
   }
 
   /** Close the browser session */
   async close(): Promise<void> {
+    for (const page of this.ownedPages) {
+      await page.close().catch(() => {});
+    }
+    this.ownedPages = [];
+    // Attach mode: just disconnect — the user's Chrome keeps running.
+    if (this.cdpBrowser) {
+      await this.cdpBrowser.close().catch(() => {});
+      this.cdpBrowser = null;
+      this.context = null;
+      return;
+    }
     if (this.context) {
       await this.context.close();
       this.context = null;

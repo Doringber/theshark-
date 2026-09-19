@@ -8,6 +8,8 @@ export interface AuthOptions {
   timeout?: number;
   /** Auto-close after detecting login */
   autoClose?: boolean;
+  /** Attach to running Chrome via CDP instead of launching a profile */
+  cdpUrl?: string;
 }
 
 export async function runAuth(options: AuthOptions): Promise<void> {
@@ -37,6 +39,7 @@ export async function runAuth(options: AuthOptions): Promise<void> {
   const session = new BrowserSession({
     profilePath,
     headed: true,
+    cdpUrl: options.cdpUrl ?? "",
     args: [
       "--disable-blink-features=AutomationControlled",
       "--disable-features=IsolateOrigins,site-per-process",

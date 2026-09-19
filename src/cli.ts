@@ -33,12 +33,14 @@ program
   .requiredOption("--platform <name>", "Platform name: facebook, whatsapp, yad2")
   .option("--timeout <ms>", "How long to keep browser open (ms)", "300000")
   .option("--auto-close", "Auto-close when login detected")
-  .action(async (opts: { platform: string; timeout: string; autoClose?: boolean }) => {
+  .option("--cdp <url>", "Attach to your running Chrome (needs --remote-debugging-port)")
+  .action(async (opts: { platform: string; timeout: string; autoClose?: boolean; cdp?: string }) => {
     try {
       await runAuth({
         platform: opts.platform as PlatformName,
         timeout: parseInt(opts.timeout, 10),
         autoClose: opts.autoClose ?? true,
+        cdpUrl: opts.cdp ?? process.env["SHARK_CDP_URL"],
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -54,12 +56,14 @@ program
   .option("--url <url>", "Specific URL to inspect (overrides platform default)")
   .option("--output <path>", "Save snapshot to this path")
   .option("--wait <ms>", "Wait time before capturing (ms)", "3000")
+  .option("--cdp <url>", "Attach to your running Chrome (needs --remote-debugging-port)")
   .action(
     async (opts: {
       platform: string;
       url?: string;
       output?: string;
       wait: string;
+      cdp?: string;
     }) => {
       try {
         await runInspect({
@@ -67,6 +71,7 @@ program
           url: opts.url,
           output: opts.output,
           wait: parseInt(opts.wait, 10),
+          cdpUrl: opts.cdp ?? process.env["SHARK_CDP_URL"],
         });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -91,6 +96,7 @@ program
   .option("--location <location>", "City/area (skip interactive prompt)")
   .option("--category <category>", "Facebook category, e.g. Furniture")
   .option("--groups <names>", "Comma-separated Facebook group names to cross-post to")
+  .option("--cdp <url>", "Attach to your running Chrome (needs --remote-debugging-port)")
   .option(
     "--platforms <platforms>",
     "Comma-separated platforms: facebook,whatsapp,yad2",
@@ -114,6 +120,7 @@ program
       groups?: string;
       platforms?: string;
       analysisOnly?: string;
+      cdp?: string;
     }) => {
       try {
         await runSell({
@@ -121,6 +128,7 @@ program
           publish: opts.publish ?? false,
           autoApprove: opts.autoApprove ?? false,
           noDryRun: opts.dryRun === false,
+          cdpUrl: opts.cdp ?? process.env["SHARK_CDP_URL"],
           title: opts.title,
           price: opts.price ? Number(opts.price) : undefined,
           description: opts.description,

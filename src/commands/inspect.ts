@@ -12,6 +12,8 @@ export interface InspectOptions {
   output?: string;
   /** Wait time before capturing (ms) */
   wait?: number;
+  /** Attach to running Chrome via CDP instead of launching a profile */
+  cdpUrl?: string;
 }
 
 export async function runInspect(options: InspectOptions): Promise<string> {
@@ -36,6 +38,7 @@ export async function runInspect(options: InspectOptions): Promise<string> {
   const session = new BrowserSession({
     profilePath,
     headed: true,
+    cdpUrl: options.cdpUrl ?? "",
   });
 
   try {

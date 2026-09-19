@@ -44,6 +44,8 @@ export interface SellOptions {
   autoApprove?: boolean;
   /** Override config dryRun setting */
   noDryRun?: boolean;
+  /** Attach to running Chrome via CDP instead of launching a profile */
+  cdpUrl?: string;
 }
 
 export interface SellResult {
@@ -469,6 +471,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
           platform,
         ),
         headed: true,
+        cdpUrl: options.cdpUrl ?? "",
       });
       const page = await session.getPage();
 
