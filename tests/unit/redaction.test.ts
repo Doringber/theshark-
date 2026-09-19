@@ -60,8 +60,7 @@ describe("Redaction", () => {
     });
 
     it("redacts browser storage values", () => {
-      const input =
-        'localStorage.setItem("token", "fake-test-val-000")';
+      const input = 'localStorage.setItem("token", "fake-test-val-000")';
       const result = redact(input);
       expect(result).not.toContain("fake-test-val-000");
     });
@@ -84,8 +83,7 @@ describe("Redaction", () => {
     });
 
     it("handles multiple sensitive values in one string", () => {
-      const input =
-        "Token: Bearer FAKETEST | Cookie: sess=FAKETEST | Email: a@b.com";
+      const input = "Token: Bearer FAKETEST | Cookie: sess=FAKETEST | Email: a@b.com";
       const result = redact(input);
       expect(result).not.toContain("FAKETEST");
       expect(result).not.toContain("a@b.com");
