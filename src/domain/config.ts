@@ -108,6 +108,9 @@ export const SharkConfigSchema = z.object({
   dryRun: z.boolean().default(true),
   currency: z.literal("NIS").default("NIS"),
   browserProfilePath: z.string().default("~/.shark/browser-profile"),
+  pickupPreference: z.string().optional(),
+  defaultPlatforms: z.array(PlatformName).optional(),
+  whatsappGroups: z.array(z.string()).optional(),
   seller: SellerAddressSchema.default({}),
   platforms: z
     .object({

@@ -1,10 +1,12 @@
 import type { Page } from "playwright";
 import {
   BasePlatformAdapter,
+  type DraftContext,
   type DraftResult,
   type PlatformPreview,
   type SubmissionResult,
 } from "./platform-adapter.js";
+import { detectChallenge } from "../browser/challenge-detector.js";
 import type { ApprovedListing } from "../domain/schemas.js";
 import type { ApprovalToken } from "../services/approvals.js";
 import { validateApproval } from "../services/approvals.js";
@@ -51,11 +53,42 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
     const passwordInput = page.locator('input[type="password"]').first();
     if (await passwordInput.isVisible().catch(() => false)) return "login_required";
 
+    // Verified live saved-profile chooser (Sep 2026). Both buttons are
+    // required so an unrelated "Continue" action cannot be misclassified.
+    const continueProfile = page
+      .getByRole("button", {
+        name: /^Continue\b/,
+      })
+      .first();
+    const anotherProfile = page.getByRole("button", {
+      name: "Use another profile",
+      exact: true,
+    });
+    if (
+      (await continueProfile.isVisible().catch(() => false)) &&
+      (await anotherProfile.isVisible().catch(() => false))
+    ) {
+      return "login_required";
+    }
+
     return "unknown";
   }
 
-  async prepareDraft(page: Page, listing: ApprovedListing): Promise<DraftResult> {
+  async prepareDraft(
+    page: Page,
+    listing: ApprovedListing,
+    _context?: DraftContext,
+  ): Promise<DraftResult> {
     try {
+      const challenge = await detectChallenge(page);
+      if (challenge.present && challenge.kind) {
+        return {
+          success: false,
+          challenge: challenge.kind,
+          error: `${challenge.kind}: human verification required`,
+          nextStep: "fill_title",
+        };
+      }
       // Validate upload manifest — only approved images, at least one
       const uploadable = getUploadableImages(listing.images);
       if (uploadable.length === 0) {

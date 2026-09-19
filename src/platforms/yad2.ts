@@ -1,10 +1,12 @@
 import type { Page } from "playwright";
 import {
   BasePlatformAdapter,
+  type DraftContext,
   type DraftResult,
   type PlatformPreview,
   type SubmissionResult,
 } from "./platform-adapter.js";
+import { detectChallenge } from "../browser/challenge-detector.js";
 import type { ApprovedListing, ItemCondition } from "../domain/schemas.js";
 import type { ApprovalToken } from "../services/approvals.js";
 import { validateApproval } from "../services/approvals.js";
@@ -25,6 +27,79 @@ const Y2_CONDITION_LABEL: Record<ItemCondition, string> = {
 
 function isRealYad2(page: Page): boolean {
   return page.url().includes("yad2.co.il");
+}
+
+const YAD2_STEPS = [
+  "dismiss_resume_modal",
+  "upload_photos",
+  "fill_title",
+  "fill_type",
+  "fill_description",
+  "fill_condition",
+  "fill_price",
+  "fill_manufacturer",
+  "fill_address",
+  "accept_terms",
+] as const;
+
+function uniqueSteps(steps: string[]): string[] {
+  return [...new Set(steps)];
+}
+
+function nextYad2Step(completed: string[]): string {
+  return YAD2_STEPS.find((step) => !completed.includes(step)) ?? "done";
+}
+
+async function challengeResult(
+  page: Page,
+  completed: string[],
+): Promise<DraftResult | null> {
+  const detection = await detectChallenge(page);
+  if (!detection.present || !detection.kind) return null;
+  return {
+    success: false,
+    challenge: detection.kind,
+    completedSteps: completed,
+    nextStep: nextYad2Step(completed),
+    error: `${detection.kind}: human verification required`,
+  };
+}
+
+async function inspectYad2Progress(page: Page): Promise<string[]> {
+  const completed: string[] = [];
+  const titleLoc = isRealYad2(page)
+    ? page.getByTestId("text-field-title")
+    : page.getByLabel("כותרת");
+  const titleVisible = await titleLoc.isVisible().catch(() => false);
+  const title = titleVisible ? await titleLoc.inputValue().catch(() => "") : "";
+  if (title.trim()) completed.push("fill_title");
+
+  const uploadLoc = page.getByLabel("Upload count");
+  const uploadVisible = await uploadLoc.isVisible().catch(() => false);
+  const uploadCount = uploadVisible
+    ? Number((await uploadLoc.textContent().catch(() => "0")) ?? "0")
+    : 0;
+  if (uploadCount > 0) completed.push("upload_photos");
+
+  if (isRealYad2(page)) {
+    const photos = await page
+      .locator('[data-testid="upload-input"]')
+      .locator("xpath=ancestor::*[3]")
+      .locator("img")
+      .count()
+      .catch(() => 0);
+    if (photos > 0) completed.push("upload_photos");
+    const price = await page
+      .getByTestId("price-input")
+      .inputValue()
+      .catch(() => "");
+    if (price.trim()) completed.push("fill_price");
+  }
+  return uniqueSteps(completed);
+}
+
+function alreadyDone(completed: string[], step: string): boolean {
+  return completed.includes(step);
 }
 
 export class Yad2Adapter extends BasePlatformAdapter {
@@ -61,7 +136,11 @@ export class Yad2Adapter extends BasePlatformAdapter {
     return "unknown";
   }
 
-  async prepareDraft(page: Page, listing: ApprovedListing): Promise<DraftResult> {
+  async prepareDraft(
+    page: Page,
+    listing: ApprovedListing,
+    context?: DraftContext,
+  ): Promise<DraftResult> {
     try {
       const uploadable = getUploadableImages(listing.images);
       if (uploadable.length === 0) {
@@ -75,17 +154,26 @@ export class Yad2Adapter extends BasePlatformAdapter {
         return { success: false, error: manifestCheck.reason };
       }
 
+      const inferred = await inspectYad2Progress(page);
+      const completed = uniqueSteps([...(context?.completedSteps ?? []), ...inferred]);
+      const blocked = await challengeResult(page, completed);
+      if (blocked) return blocked;
+
       if (isRealYad2(page)) {
         return await this.prepareRealDraft(
           page,
           listing,
           uploadable.map((i) => i.path),
+          context,
+          completed,
         );
       }
       return await this.prepareFixtureDraft(
         page,
         listing,
         uploadable.map((i) => i.path),
+        context,
+        completed,
       );
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -126,45 +214,37 @@ export class Yad2Adapter extends BasePlatformAdapter {
     page: Page,
     listing: ApprovedListing,
     files: string[],
+    context: DraftContext | undefined,
+    started: string[],
   ): Promise<DraftResult> {
-    await page.goto(Y2_CREATE_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    // "Resume saved draft?" modal — always start fresh so a stale draft never
-    // leaks into a new listing. It can pop up a few seconds after the form
-    // renders, so poll for it rather than click once.
+    const resuming = Boolean(
+      context?.resumeFrom || (context?.completedSteps?.length ?? 0) > 0,
+    );
+    const completed = [...started];
+    const onCreate = page.url().includes("publish-ad-products/create");
+    if (!resuming || !onCreate) {
+      await page.goto(Y2_CREATE_URL, {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+    }
+    const blockedNow = await challengeResult(page, completed);
+    if (blockedNow) return blockedNow;
     const startFresh = page.getByRole("button", { name: "התחלה מחדש" });
     const title = page.getByTestId("text-field-title");
-    const deadline = Date.now() + 8_000;
-    while (Date.now() < deadline) {
-      if (await startFresh.isVisible().catch(() => false)) {
-        await startFresh.click().catch(() => {});
-        await page.waitForTimeout(1_000);
-        break;
+    if (!resuming && !alreadyDone(completed, "dismiss_resume_modal")) {
+      const deadline = Date.now() + 8_000;
+      while (Date.now() < deadline) {
+        const mid = await challengeResult(page, completed);
+        if (mid) return mid;
+        if (await startFresh.isVisible().catch(() => false)) {
+          await startFresh.click().catch(() => {});
+          await page.waitForTimeout(1_000);
+          break;
+        }
+        await page.waitForTimeout(400);
       }
-      await page.waitForTimeout(400);
-    }
-    // Bot check (hCaptcha) — never bypass: hand the tab to the user and wait.
-    const captcha = page
-      .getByText("Are you for real")
-      .or(page.locator('iframe[src*="hcaptcha"]'));
-    if (
-      await captcha
-        .first()
-        .isVisible({ timeout: 3_000 })
-        .catch(() => false)
-    ) {
-      await page.bringToFront().catch(() => {});
-      console.log(
-        "  🤖 Yad2 is showing a captcha — please solve it in the Shark Chrome tab (waiting up to 3 min)...",
-      );
-      await title.waitFor({ state: "attached", timeout: 180_000 }).catch(() => {});
-      if (!(await title.count())) {
-        return {
-          success: false,
-          needsMapping: false,
-          error:
-            'captcha: Yad2 bot check not solved — the tab stays open; tick "I am human" there and re-run',
-        };
-      }
+      completed.push("dismiss_resume_modal");
     }
     try {
       await title.waitFor({ state: "attached", timeout: 30_000 });
@@ -186,23 +266,27 @@ export class Yad2Adapter extends BasePlatformAdapter {
       .getByTestId("cookie-implementation-disclaimer-submit-button")
       .click({ timeout: 2_000 })
       .catch(() => {});
-    await page
-      .getByRole("button", { name: "התחלה מחדש" })
-      .click({ timeout: 2_000 })
-      .catch(() => {});
-    await page.waitForTimeout(500);
-
-    // Photos — hidden <input type=file data-testid="upload-input">
-    const upload = page.locator('input[type="file"]').first();
-    if ((await upload.count()) === 0) {
-      return {
-        success: false,
-        needsMapping: true,
-        error: "Photo upload input not found — needs_mapping",
-      };
+    if (!resuming) {
+      await page
+        .getByRole("button", { name: "התחלה מחדש" })
+        .click({ timeout: 2_000 })
+        .catch(() => {});
+      await page.waitForTimeout(500);
     }
-    await upload.setInputFiles(files);
-    await page.waitForTimeout(2_500);
+
+    const upload = page.locator('input[type="file"]').first();
+    if (!alreadyDone(completed, "upload_photos")) {
+      if ((await upload.count()) === 0) {
+        return {
+          success: false,
+          needsMapping: true,
+          error: "Photo upload input not found — needs_mapping",
+        };
+      }
+      await upload.setInputFiles(files);
+      await page.waitForTimeout(2_500);
+      completed.push("upload_photos");
+    }
     const photoCount = await page
       .locator('[data-testid="upload-input"]')
       .locator("xpath=ancestor::*[3]")
@@ -215,12 +299,17 @@ export class Yad2Adapter extends BasePlatformAdapter {
       );
     }
 
-    await title.fill(listing.title);
+    const midFill = await challengeResult(page, completed);
+    if (midFill) return midFill;
+    if (!alreadyDone(completed, "fill_title")) {
+      await title.fill(listing.title);
+      completed.push("fill_title");
+    }
 
-    // Product type (required autocomplete). Its choice may reveal extra
-    // required fields (e.g. manufacturer) that we leave for user review.
     const typeQuery = this.productType ?? listing.category ?? listing.title;
-    const typeOk = await this.fillAutocomplete(page, "text-field-type", typeQuery);
+    const typeOk = alreadyDone(completed, "fill_type")
+      ? true
+      : await this.fillAutocomplete(page, "text-field-type", typeQuery);
     if (!typeOk) {
       await page
         .screenshot({ path: ".shark/snapshots/yad2-type-fail.png", fullPage: true })
@@ -231,8 +320,12 @@ export class Yad2Adapter extends BasePlatformAdapter {
         error: `No product type matched "${typeQuery}" — pass --yad2-type with a Yad2 category name`,
       };
     }
+    if (!alreadyDone(completed, "fill_type")) completed.push("fill_type");
 
-    await page.getByTestId("text-area").fill(listing.description);
+    if (!alreadyDone(completed, "fill_description")) {
+      await page.getByTestId("text-area").fill(listing.description);
+      completed.push("fill_description");
+    }
 
     const conditionLabel = Y2_CONDITION_LABEL[listing.condition];
     const toggle = page
@@ -243,7 +336,10 @@ export class Yad2Adapter extends BasePlatformAdapter {
       await toggle.click();
     }
 
-    await page.getByTestId("price-input").fill(String(listing.price));
+    if (!alreadyDone(completed, "fill_price")) {
+      await page.getByTestId("price-input").fill(String(listing.price));
+      completed.push("fill_price");
+    }
 
     // Manufacturer (required for some types) — read-only input opening a menu
     const mfr = page.getByTestId("text-field-manufacture");
@@ -333,39 +429,72 @@ export class Yad2Adapter extends BasePlatformAdapter {
         .catch(() => {});
     }
 
-    return { success: true };
+    return {
+      success: true,
+      completedSteps: uniqueSteps(completed),
+      completedActions: ["upload_images", "create_draft"],
+      nextStep: "done",
+    };
   }
 
   private async prepareFixtureDraft(
     page: Page,
     listing: ApprovedListing,
     files: string[],
+    context: DraftContext | undefined,
+    started: string[],
   ): Promise<DraftResult> {
-    // Navigate: מוצרים → פרטי
+    const resuming = Boolean(
+      context?.resumeFrom || (context?.completedSteps?.length ?? 0) > 0,
+    );
+    const completed = [...started];
+    const titleInput = page.getByLabel("כותרת");
+    const formVisible = await titleInput.isVisible().catch(() => false);
     const productsLink = page.getByLabel("מוצרים");
-    if (!(await productsLink.isVisible().catch(() => false))) {
+
+    if (
+      formVisible &&
+      !resuming &&
+      !(await productsLink.isVisible().catch(() => false))
+    ) {
       return {
         success: false,
         needsMapping: true,
         error: "Products (מוצרים) link not found — needs_mapping",
       };
     }
-    await productsLink.click();
-    await page.waitForLoadState("domcontentloaded");
 
-    // Select Private (פרטי), never Business (מנוי עסקי)
-    const privateLink = page.getByLabel("פרטי");
-    if (!(await privateLink.isVisible().catch(() => false))) {
-      return {
-        success: false,
-        needsMapping: true,
-        error: "Private (פרטי) option not found — needs_mapping",
-      };
+    if (!formVisible) {
+      if (resuming) {
+        return {
+          success: false,
+          needsMapping: true,
+          error: "Yad2 page is not the product form — needs_mapping",
+          completedSteps: completed,
+        };
+      }
+      if (!(await productsLink.isVisible().catch(() => false))) {
+        return {
+          success: false,
+          needsMapping: true,
+          error: "Products (מוצרים) link not found — needs_mapping",
+        };
+      }
+      await productsLink.click();
+      await page.waitForLoadState("domcontentloaded");
+
+      const privateLink = page.getByLabel("פרטי");
+      if (!(await privateLink.isVisible().catch(() => false))) {
+        return {
+          success: false,
+          needsMapping: true,
+          error: "Private (פרטי) option not found — needs_mapping",
+        };
+      }
+      await privateLink.click();
+      await page.waitForLoadState("domcontentloaded");
     }
-    await privateLink.click();
-    await page.waitForLoadState("domcontentloaded");
 
-    const titleInput = page.getByLabel("כותרת");
     if (!(await titleInput.isVisible().catch(() => false))) {
       return {
         success: false,
@@ -374,12 +503,22 @@ export class Yad2Adapter extends BasePlatformAdapter {
       };
     }
 
-    await titleInput.fill(listing.title);
-    await page.getByLabel("מחיר").fill(String(listing.price));
+    if (!alreadyDone(completed, "fill_title")) {
+      await titleInput.fill(listing.title);
+      completed.push("fill_title");
+    }
+    if (!alreadyDone(completed, "fill_price")) {
+      await page.getByLabel("מחיר").fill(String(listing.price));
+      completed.push("fill_price");
+    }
 
     const descField = page.getByLabel("תיאור");
-    if (await descField.isVisible().catch(() => false)) {
+    if (
+      !alreadyDone(completed, "fill_description") &&
+      (await descField.isVisible().catch(() => false))
+    ) {
       await descField.fill(listing.description);
+      completed.push("fill_description");
     }
 
     const cityField = page.getByLabel("עיר");
@@ -388,11 +527,20 @@ export class Yad2Adapter extends BasePlatformAdapter {
     }
 
     const photoInput = page.getByLabel("הוספת תמונות");
-    if (await photoInput.isVisible().catch(() => false)) {
+    if (
+      !alreadyDone(completed, "upload_photos") &&
+      (await photoInput.isVisible().catch(() => false))
+    ) {
       await photoInput.setInputFiles(files);
+      completed.push("upload_photos");
     }
 
-    return { success: true };
+    return {
+      success: true,
+      completedSteps: uniqueSteps(completed),
+      completedActions: ["upload_images", "create_draft"],
+      nextStep: "done",
+    };
   }
 
   async preview(page: Page): Promise<PlatformPreview> {

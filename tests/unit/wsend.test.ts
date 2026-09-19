@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { normalizePhone, buildSendUrl, clipboardScript } from "../../src/commands/wsend.js";
+import {
+  normalizePhone,
+  buildSendUrl,
+  clipboardScript,
+} from "../../src/commands/wsend.js";
 
 describe("normalizePhone", () => {
   it("converts 05x to 972", () => {

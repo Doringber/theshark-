@@ -1,10 +1,12 @@
 import type { Page } from "playwright";
 import {
   BasePlatformAdapter,
+  type DraftContext,
   type DraftResult,
   type PlatformPreview,
   type SubmissionResult,
 } from "./platform-adapter.js";
+import { detectChallenge } from "../browser/challenge-detector.js";
 import type { ApprovedListing } from "../domain/schemas.js";
 import type { ApprovalToken } from "../services/approvals.js";
 import { validateApproval } from "../services/approvals.js";
@@ -40,6 +42,8 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
 
   /** Exact chat/group names (as shown in WhatsApp) to send the listing to */
   targetChats: string[] = [];
+  /** Chats already sent in this run — never send twice. */
+  alreadySentChats: string[] = [];
 
   /** Listing captured in prepareDraft so submit can post to every target chat */
   private pendingListing: ApprovedListing | null = null;
@@ -97,8 +101,20 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
     return titles.filter((title) => pattern.test(title));
   }
 
-  async prepareDraft(page: Page, listing: ApprovedListing): Promise<DraftResult> {
+  async prepareDraft(
+    page: Page,
+    listing: ApprovedListing,
+    _context?: DraftContext,
+  ): Promise<DraftResult> {
     try {
+      const challenge = await detectChallenge(page);
+      if (challenge.present && challenge.kind) {
+        return {
+          success: false,
+          challenge: challenge.kind,
+          error: `${challenge.kind}: human verification required`,
+        };
+      }
       const uploadable = getUploadableImages(listing.images);
       if (uploadable.length === 0) {
         return {
@@ -116,7 +132,8 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
           return {
             success: false,
             needsMapping: true,
-            error: "No WhatsApp chats selected — pass --wa-to with exact chat/group names",
+            error:
+              "No WhatsApp chats selected — pass --wa-to with exact chat/group names",
           };
         }
         // Verify every target chat exists before anything is sent anywhere.
@@ -158,7 +175,9 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
     await search.click();
     await search.fill("");
     await search.fill(chatName);
-    const row = page.locator(`#pane-side span[title="${chatName.replace(/"/g, '\\"')}"]`).first();
+    const row = page
+      .locator(`#pane-side span[title="${chatName.replace(/"/g, '\\"')}"]`)
+      .first();
     try {
       await row.waitFor({ state: "visible", timeout: 8_000 });
     } catch {
@@ -172,17 +191,26 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
   }
 
   /** Real Web: attach photos, type caption, press Send in the open chat */
-  private async sendToOpenChat(page: Page, text: string, files: string[]): Promise<boolean> {
+  private async sendToOpenChat(
+    page: Page,
+    text: string,
+    files: string[],
+  ): Promise<boolean> {
     await page.locator('#main [aria-label="Attach"]').click();
     const photos = page.getByRole("menuitem", { name: "Photos & videos" });
     await photos.waitFor({ state: "visible", timeout: 5_000 });
-    const [chooser] = await Promise.all([page.waitForEvent("filechooser"), photos.click()]);
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      photos.click(),
+    ]);
     await chooser.setFiles(files);
 
     const sendBtn = page.locator('[role="button"][aria-label^="Send"]').first();
     await sendBtn.waitFor({ state: "visible", timeout: 15_000 });
 
-    const caption = page.locator('[role="textbox"][aria-placeholder="Type a message"]').first();
+    const caption = page
+      .locator('[role="textbox"][aria-placeholder="Type a message"]')
+      .first();
     await caption.waitFor({ state: "visible", timeout: 5_000 });
     await caption.click();
     // Multi-line caption: Shift+Enter keeps it in the box, Enter would send.
@@ -296,8 +324,9 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
       }
 
       const text = buildWhatsAppMessage(this.pendingListing);
-      const sent: string[] = [];
+      const sent: string[] = [...this.alreadySentChats];
       for (const chat of this.targetChats) {
+        if (this.alreadySentChats.includes(chat)) continue;
         try {
           if (!(await this.openChat(page, chat))) {
             return {
@@ -308,8 +337,10 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
           }
           await this.sendToOpenChat(page, text, this.pendingFiles);
           sent.push(chat);
+          this.alreadySentChats.push(chat);
         } catch (error) {
-          const msg = error instanceof Error ? error.message.split("\n")[0] : String(error);
+          const msg =
+            error instanceof Error ? error.message.split("\n")[0] : String(error);
           return {
             status: "unknown_submission_state",
             destination,
@@ -317,7 +348,11 @@ export class WhatsAppWebAdapter extends BasePlatformAdapter {
           };
         }
       }
-      return { status: "published", destination, message: `Sent to ${sent.join(", ")}` };
+      return {
+        status: "published",
+        destination,
+        message: `Sent to ${sent.join(", ")}`,
+      };
     }
 
     // Fixture flow

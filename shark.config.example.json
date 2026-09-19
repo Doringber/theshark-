@@ -1,6 +1,9 @@
 {
   "language": "he",
   "dryRun": true,
+  "pickupPreference": "איסוף עצמי",
+  "defaultPlatforms": ["facebook", "whatsapp", "yad2"],
+  "whatsappGroups": [],
   "seller": {
     "city": "תל אביב יפו",
     "street": "דיזנגוף",

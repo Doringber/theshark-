@@ -58,11 +58,14 @@ export async function runInspect(options: InspectOptions): Promise<string> {
 
     // Also capture accessible name tree via aria snapshot
     console.log("  🌳 Capturing accessibility tree...");
-    const accessibilityTree = await page.locator("body").ariaSnapshot().catch(() => "");
+    const accessibilityTree = await page
+      .locator("body")
+      .ariaSnapshot()
+      .catch(() => "");
 
     // Capture all interactive elements with their roles and labels
     console.log("  🎯 Mapping interactive elements...");
-    const interactiveElements = await page.evaluate(`
+    const interactiveElements = (await page.evaluate(`
       (() => {
         const elements = [];
         const selectors = [
@@ -99,7 +102,7 @@ export async function runInspect(options: InspectOptions): Promise<string> {
         });
         return elements;
       })()
-    `) as Array<{
+    `)) as Array<{
       tag: string;
       role: string | null;
       ariaLabel: string | null;
@@ -135,11 +138,7 @@ export async function runInspect(options: InspectOptions): Promise<string> {
     const outputDir = resolve(".shark/snapshots");
     await mkdir(outputDir, { recursive: true });
     const outputPath =
-      options.output ??
-      resolve(
-        outputDir,
-        `${platform}-${Date.now()}.json`,
-      );
+      options.output ?? resolve(outputDir, `${platform}-${Date.now()}.json`);
     await writeFile(outputPath, JSON.stringify(report, null, 2), "utf-8");
 
     // Print summary

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FakeYad2 — Human verification</title>
+  </head>
+  <body>
+    <div id="captcha" role="dialog" aria-label="CAPTCHA">
+      <h1>Are you for real?</h1>
+      <iframe src="about:blank" title="hCaptcha"></iframe>
+      <button type="button" id="human-complete">I am human</button>
+    </div>
+
+    <div id="product-form" role="main" aria-label="Product form" hidden>
+      <h1>פרטי המוצר</h1>
+      <form aria-label="Product details">
+        <label for="photos">תמונות</label>
+        <input
+          id="photos"
+          type="file"
+          multiple
+          accept="image/*"
+          aria-label="הוספת תמונות"
+        />
+        <span id="upload-count" aria-label="Upload count">0</span>
+        <label for="title">כותרת</label>
+        <input id="title" type="text" required aria-label="כותרת" />
+        <label for="price">מחיר</label>
+        <input id="price" type="number" required aria-label="מחיר" />
+        <label for="description">תיאור</label>
+        <textarea id="description" aria-label="תיאור"></textarea>
+        <label for="city">עיר</label>
+        <input id="city" type="text" aria-label="עיר" />
+        <button type="button" id="publish-btn" role="button" aria-label="פרסום">
+          פרסום
+        </button>
+      </form>
+    </div>
+    <div id="result" style="display: none" aria-label="Result">
+      <span id="publish-status">not_published</span>
+    </div>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      function completeHuman() {
+        document.getElementById("captcha").hidden = true;
+        document.getElementById("product-form").hidden = false;
+      }
+      document
+        .getElementById("human-complete")
+        .addEventListener("click", completeHuman);
+      document.getElementById("photos").addEventListener("change", () => {
+        const count = document.getElementById("upload-count");
+        count.textContent = String(Number(count.textContent || "0") + 1);
+      });
+      document.getElementById("publish-btn").addEventListener("click", () => {
+        document.getElementById("publish-status").textContent = "published";
+      });
+      const auto = params.get("autoclose");
+      if (auto) {
+        setTimeout(completeHuman, Number(auto));
+      }
+    </script>
+  </body>
+</html>

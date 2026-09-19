@@ -38,6 +38,28 @@ function makeListing(overrides: Partial<ApprovedListing> = {}): ApprovedListing 
 test.describe("Facebook Marketplace adapter", () => {
   const adapter = new FacebookMarketplaceAdapter();
 
+  test("detects the verified live profile chooser as login_required", async ({
+    page,
+  }) => {
+    await page.setContent(`
+      <main>
+        <h1>Saved profile</h1>
+        <div role="button">
+          <div role="button" aria-label="Continue Saved profile">Continue</div>
+        </div>
+        <div role="button" aria-label="Use another profile">Use another profile</div>
+      </main>
+    `);
+
+    await expect(
+      page.getByRole("button", { name: /^Continue\b/ }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Use another profile", exact: true }),
+    ).toBeVisible();
+    await expect(adapter.verifyLogin(page)).resolves.toBe("login_required");
+  });
+
   test.describe("Navigation: Marketplace → Create → Item for sale", () => {
     test("navigates through Marketplace → Create → Item for sale", async ({ page }) => {
       await page.goto(`${BASE}/facebook/index.html?state=logged_in`);

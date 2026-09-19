@@ -4,6 +4,27 @@ Local CLI tool for preparing and cross-posting second-hand product listings to *
 
 > Dry-run is the default. Nothing is ever published without `--publish` **and** explicit approval.
 
+## Sell an item
+
+```bash
+npm install && npx playwright install chromium
+cp shark.config.example.json shark.config.json
+npm run dev -- doctor
+npm run dev -- configure --city "תל אביב" --pickup "איסוף עצמי" --platforms facebook,yad2,whatsapp
+npm run dev -- sell ~/Desktop/item-photos
+npm run dev -- resume <run-id>   # only if interrupted
+```
+
+Or pass individual photos:
+
+```bash
+npm run dev -- sell --image ./front.jpg --image ./back.jpg --platforms facebook,yad2,whatsapp
+```
+
+**CAPTCHA:** Shark never solves, clicks, or bypasses a challenge. It stops, keeps the same Shark Chrome tab open, notifies you, and continues automatically after you complete it. If Shark exits first, run `shark resume <run-id>`.
+
+**Dry-run vs publish:** Dry-run (the default) prepares drafts only. `--publish` unlocks the approval path; it is not approval by itself. Every real Publish or Send still needs a fresh yes.
+
 ## One shared, logged-in Chrome window
 
 Shark never opens throwaway browsers. Every command attaches (over CDP, `localhost:9222`) to a
@@ -23,9 +44,9 @@ profile, so attaching to it is impossible without relaunching it with debug flag
 The shared Shark window gives the same result with a safer boundary. Sign it into your Google
 account (Chrome sync) if you want your bookmarks, passwords and extensions in it.
 
-All three adapters are mapped against the **live sites** (Sep 2026) and verified end-to-end:
-Facebook Marketplace + groups (published), WhatsApp (sent with photos + caption), Yad2 (full draft,
-you press "סיום והעלאה").
+All three adapters are mapped against the **live sites** (Sep 2026). Fixture integration tests
+exercise the complete safe workflow. Live readiness checks verify login and known page identity;
+they do not Publish or Send.
 
 ## Quick Start
 
@@ -44,15 +65,17 @@ npm run dev -- sell --image ./photos/item.jpg
 
 ## Commands
 
-| Command                                   | Description                                         |
-| ----------------------------------------- | --------------------------------------------------- |
-| `shark sell --image <paths...>`           | Run the interactive sale flow (dry-run by default)  |
-| `shark sell --image <paths...> --publish` | Enable the approval path for final submission       |
-| `shark browser [--url <url>]`             | Open / focus the shared Shark Chrome window         |
-| `shark auth --platform <name>`            | Open the platform tab in Shark Chrome for login     |
-| `shark inspect --platform <name>`         | Save a sanitized DOM snapshot of a platform page    |
-| `shark doctor`                            | Check Node, browser, config, and credentials        |
-| `shark configure`                         | Save platform URLs, language, city, browser profile |
+| Command                                | Description                                      |
+| -------------------------------------- | ------------------------------------------------ |
+| `shark sell [folder\|files] --image …` | Prepare drafts (dry-run by default)              |
+| `shark sell … --publish`               | Enable the approval path for final submission    |
+| `shark resume <run-id>`                | Continue an interrupted run from its checkpoint  |
+| `shark status <run-id>`                | Concise per-platform status and next action      |
+| `shark browser [--url <url>]`          | Open / focus the shared Shark Chrome window      |
+| `shark auth --platform <name>`         | Open the platform tab in Shark Chrome for login  |
+| `shark inspect --platform <name>`      | Save a sanitized DOM snapshot of a platform page |
+| `shark doctor`                         | Check Node, browser, config, and credentials     |
+| `shark configure`                      | Remember language, city, pickup, platforms       |
 
 ### `sell` flags (non-interactive / agent use)
 
@@ -64,7 +87,7 @@ npm run dev -- sell --image ./photos/item.jpg
 | `--wa-to "Chat 1,Group 2"`                             | WhatsApp chats/groups (exact names) — photos + Hebrew caption           |
 | `--yad2-type "מחשבים ניידים"` `--yad2-brand Apple`     | Yad2 product type (their category name) and manufacturer                |
 | `--draft-only`                                         | Fill the form and leave the tab open for review — never submit          |
-| `--publish --auto-approve [--no-dry-run]`              | Real submission without prompts (agent mode)                            |
+| `--publish [--no-dry-run]`                             | Enable final prompts; each destination still needs a fresh approval     |
 | `--cdp <url>`                                          | CDP endpoint (default shared Shark Chrome; `none` = legacy own profile) |
 
 Example — real MacBook run used during development:
@@ -74,7 +97,7 @@ npm run dev -- sell --image p1.jpg --image p2.jpg --image p3.jpg \
   --title "מקבוק אייר 2015 13 אינץ'" --price 300 --condition good --location "מודיעין מכבים רעות" \
   --description "עובד מצוין, סוללה במצב טוב. איסוף עצמי." \
   --platforms whatsapp,yad2 --wa-to "+972 50-732-8808" \
-  --yad2-type "מחשבים ניידים" --yad2-brand Apple --draft-only --publish --auto-approve
+  --yad2-type "מחשבים ניידים" --yad2-brand Apple --draft-only
 ```
 
 ## Configuration
@@ -161,7 +184,8 @@ Reuses the single WhatsApp tab (WhatsApp allows one). Sidebar search `#side inpu
 "התחלה מחדש". Photos → title → product type (autocomplete) → manufacturer (menu) → description →
 condition toggle → price → contact modal: city / street / house number (all pick-from-list) →
 terms checkbox. `--draft-only` stops there; otherwise `סיום והעלאה`. An hCaptcha ("Are you for real?")
-is handed to the user, never bypassed.
+pauses the run at `awaiting_human_captcha`. Shark waits in the same tab; it never clicks the
+checkbox or retries Publish automatically.
 
 ## Claude Code plugin
 
@@ -190,22 +214,10 @@ npm run test:integration  # Playwright integration tests
 
 ### Test Suite
 
-| Suite              | Tests   | Framework  | Scope                                                |
-| ------------------ | ------- | ---------- | ---------------------------------------------------- |
-| image-validation   | 24      | Vitest     | Image path/type/upload-state validation              |
-| listing-schemas    | 14      | Vitest     | Listing Zod schema enforcement                       |
-| url-safety         | 22      | Vitest     | HTTPS-only, host allowlisting, credential rejection  |
-| config             | 16      | Vitest     | Configuration loading and defaults                   |
-| approvals          | 12      | Vitest     | Token creation, expiry, platform/destination binding |
-| run-store          | 20      | Vitest     | Run persistence, status transitions, cancellation    |
-| redaction          | 23      | Vitest     | PII, secrets, tokens, URLs sanitization              |
-| safe-navigation    | 4       | Vitest     | Host validation for navigation                       |
-| platform-adapter   | 4       | Vitest     | Adapter contract and BasePlatformAdapter stubs       |
-| browser-foundation | 21      | Playwright | Login detection, navigation, snapshots on fixtures   |
-| facebook-adapter   | 12      | Playwright | Full Marketplace flow on fixtures                    |
-| whatsapp-adapter   | 11      | Playwright | Group management + per-group approval on fixtures    |
-| yad2-adapter       | 11      | Playwright | Hebrew form flow on fixtures                         |
-| **Total**          | **194** |            |                                                      |
+The release gate runs the complete Vitest suite plus 66 Playwright fixture tests covering browser
+foundations, Facebook, WhatsApp, Yad2, CAPTCHA interruption, resume, and duplicate prevention.
+GitHub Actions runs format, lint, typecheck, build, unit, and integration checks for every PR and
+push to `main`.
 
 Integration tests run against local HTML fixtures served on `localhost:4173` — no real platform interaction.
 

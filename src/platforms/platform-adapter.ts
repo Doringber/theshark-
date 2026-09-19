@@ -2,6 +2,12 @@ import type { Page } from "playwright";
 import type { ApprovalToken } from "../services/approvals.js";
 import type { ApprovedListing } from "../domain/schemas.js";
 
+/** Optional resume context for an in-progress draft. */
+export interface DraftContext {
+  resumeFrom?: string;
+  completedSteps?: string[];
+}
+
 /** Result from preparing a draft on a platform */
 export interface DraftResult {
   success: boolean;
@@ -9,6 +15,11 @@ export interface DraftResult {
   error?: string;
   /** If a required step could not be located */
   needsMapping?: boolean;
+  /** Present when a human challenge is blocking automation */
+  challenge?: "hcaptcha" | "recaptcha" | "cloudflare" | "security_checkpoint";
+  completedSteps?: string[];
+  completedActions?: string[];
+  nextStep?: string;
 }
 
 /** Preview of what will be submitted */
@@ -27,11 +38,15 @@ export interface PlatformPreview {
 export interface SubmissionResult {
   status:
     | "published"
+    | "submitted"
     | "skipped"
     | "failed"
     | "unknown_submission_state"
     | "needs_mapping"
-    | "dry_run";
+    | "dry_run"
+    | "draft_ready"
+    | "awaiting_human_captcha"
+    | "awaiting_login";
   destination: string;
   message?: string;
 }
@@ -50,7 +65,11 @@ export interface PlatformAdapter {
   verifyLogin(page: Page): Promise<"logged_in" | "login_required" | "unknown">;
 
   /** Prepare a draft listing on this platform */
-  prepareDraft(page: Page, listing: ApprovedListing): Promise<DraftResult>;
+  prepareDraft(
+    page: Page,
+    listing: ApprovedListing,
+    context?: DraftContext,
+  ): Promise<DraftResult>;
 
   /** Get a preview of what will be submitted */
   preview(page: Page): Promise<PlatformPreview>;
@@ -74,7 +93,11 @@ export abstract class BasePlatformAdapter implements PlatformAdapter {
     return "unknown";
   }
 
-  async prepareDraft(_page: Page, _listing: ApprovedListing): Promise<DraftResult> {
+  async prepareDraft(
+    _page: Page,
+    _listing: ApprovedListing,
+    _context?: DraftContext,
+  ): Promise<DraftResult> {
     return {
       success: false,
       needsMapping: true,

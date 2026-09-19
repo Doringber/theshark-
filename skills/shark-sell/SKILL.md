@@ -14,14 +14,16 @@ ever drives. Never launch other browsers.
 ## Non-negotiables
 
 - **Dry-run is the default.** Real submission needs `--publish` (and `--no-dry-run` if
-  `shark.config.json` has `dryRun: true`). Only add `--auto-approve` when the user has
-  clearly approved publishing in this conversation.
+  `shark.config.json` has `dryRun: true`). Every destination still requires a fresh
+  interactive approval immediately before Publish or Send.
 - **One approval per destination.** Marketplace, each Facebook group, each WhatsApp
   chat and Yad2 are separate destinations. Name them back to the user before publishing.
 - **Never invent product facts.** Title, price, condition, description, location come
   from the user. Ask if missing; do not guess a price.
 - **Never bypass captchas or logins.** If Yad2 shows "Are you for real?" or a site asks
-  to log in, tell the user to do it in the Shark Chrome tab and re-run.
+  to log in, tell the user to complete it in the Shark Chrome tab. Shark never clicks
+  a CAPTCHA. It waits on the same tab and continues automatically. If the process
+  already exited, run `shark resume <run-id>`.
 - **Selectors are mapped from the live DOM.** If a run returns `needs_mapping`, do not
   guess a fix — run `inspect` and read the snapshot in `.shark/snapshots/`.
 
@@ -32,13 +34,14 @@ ever drives. Never launch other browsers.
    platform, destinations (FB group names, WhatsApp chat names, Yad2 type/brand).
 2. **Preview (dry-run)** — always first:
    ```bash
+   npm run dev -- sell ~/Desktop/item-photos --platforms facebook,yad2,whatsapp
    npm run dev -- sell --image a.jpg --image b.jpg \
      --title "..." --price 300 --condition good --location "תל אביב" \
      --description "..." --platforms facebook,whatsapp,yad2
    ```
 3. **Show the user the plan** (one line per destination) and get an explicit yes.
-4. **Publish** with the same flags plus `--publish --auto-approve` (and `--no-dry-run`
-   when config forces dry-run). Platform specifics:
+4. **Publish** with the same flags plus `--publish` (and `--no-dry-run` when config
+   forces dry-run). Approve each destination at its final prompt. Platform specifics:
 
    | Platform | Flags                                                             | Notes                                                                                                                          |
    | -------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -46,9 +49,10 @@ ever drives. Never launch other browsers.
    | whatsapp | `--wa-to "Chat 1,Group 2"` (exact names as shown in WhatsApp)     | Sends photos + Hebrew caption to each chat. WhatsApp allows one tab — Shark reuses it.                                         |
    | yad2     | `--yad2-type "מחשבים ניידים"` `--yad2-brand Apple` `--draft-only` | Type is Yad2's own category name. Prefer `--draft-only`: fills everything, leaves the tab for the user to press "סיום והעלאה". |
 
-5. **Report** the summary block (run id, per-destination status). `published`,
-   `skipped`, `needs_mapping`, `unknown_submission_state` mean exactly that — do not
-   upgrade an uncertain state to success.
+5. **Report** the summary block (run id, per-destination status). `draft_ready`,
+   `submitted`, `awaiting_human_captcha`, `skipped`, `needs_mapping`, and
+   `unknown_submission_state` mean exactly that — do not upgrade an uncertain state
+   to success. Use `shark status <run-id>` and `shark resume <run-id>` after a pause.
 
 ## Setup / recovery commands
 
@@ -74,5 +78,6 @@ Seller pickup address for Yad2 lives in `shark.config.json` →
 - **Yad2**: form at `/publish-ad-products/create`, stable `data-testid`s
   (`text-field-title`, `text-field-type`, `text-field-manufacture`, `text-area`,
   `toggle-button-input`, `price-input`, `edit-button`, `checkbox-input`). Type, city,
-  street and house number are all pick-from-list autocompletes. A "resume draft?" modal
-  is always answered with "התחלה מחדש". Rapid reloads trigger hCaptcha — slow down.
+  street and house number are all pick-from-list autocompletes. A first-time
+  "resume draft?" modal is answered with "התחלה מחדש"; a CAPTCHA resume never
+  clicks that button. Rapid reloads trigger hCaptcha — slow down.

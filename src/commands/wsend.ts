@@ -32,10 +32,17 @@ export function buildSendUrl(to: string, text?: string): string {
 }
 
 /** AppleScript that puts a JPEG/PNG file on the macOS clipboard as a picture. */
-export function clipboardScript(imagePath: string): { script: string } | { error: string } {
+export function clipboardScript(
+  imagePath: string,
+): { script: string } | { error: string } {
   const lower = imagePath.toLowerCase();
-  const kind = lower.endsWith(".png") ? "PNG picture" : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "JPEG picture" : null;
-  if (!kind) return { error: `Unsupported image type (need .jpg/.png): "${imagePath}"` };
+  const kind = lower.endsWith(".png")
+    ? "PNG picture"
+    : lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+      ? "JPEG picture"
+      : null;
+  if (!kind)
+    return { error: `Unsupported image type (need .jpg/.png): "${imagePath}"` };
   if (!existsSync(imagePath)) return { error: `Image not found: "${imagePath}"` };
   return {
     script: `set the clipboard to (read (POSIX file "${imagePath}") as ${kind})`,
@@ -55,7 +62,9 @@ async function osa(script: string): Promise<void> {
  * This drives the user's own window, so delivery cannot be verified
  * programmatically — the result is always unknown_submission_state.
  */
-export async function runWSend(options: WSendOptions): Promise<{ status: "unknown_submission_state"; message: string }> {
+export async function runWSend(
+  options: WSendOptions,
+): Promise<{ status: "unknown_submission_state"; message: string }> {
   const { to, text, image, waitSeconds = 12 } = options;
   if (!text && !image) throw new Error("Provide --text and/or --image");
 

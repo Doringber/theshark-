@@ -9,11 +9,14 @@ import { homedir } from "node:os";
 export const SHARK_CDP_URL = "http://localhost:9222";
 /** Where the shared Shark Chrome keeps its logins (all platforms in one) */
 export const SHARK_CHROME_DIR = join(homedir(), ".shark", "chrome");
-export const CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+export const CHROME_BIN =
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 async function cdpAlive(url: string): Promise<boolean> {
   try {
-    const res = await fetch(`${url}/json/version`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${url}/json/version`, {
+      signal: AbortSignal.timeout(1500),
+    });
     return res.ok;
   } catch {
     return false;
@@ -25,7 +28,9 @@ async function cdpAlive(url: string): Promise<boolean> {
  * Launches it (real Chrome, own persistent profile, debug port) if needed.
  * Returns the CDP URL, or null if Chrome isn't installed.
  */
-export async function ensureSharkChrome(url: string = SHARK_CDP_URL): Promise<string | null> {
+export async function ensureSharkChrome(
+  url: string = SHARK_CDP_URL,
+): Promise<string | null> {
   if (await cdpAlive(url)) return url;
   if (!existsSync(CHROME_BIN)) return null;
 
@@ -39,7 +44,6 @@ export async function ensureSharkChrome(url: string = SHARK_CDP_URL): Promise<st
       "--remote-debugging-address=127.0.0.1",
       "--no-first-run",
       "--no-default-browser-check",
-      "--disable-blink-features=AutomationControlled",
       "about:blank",
     ],
     { detached: true, stdio: "ignore" },
@@ -58,8 +62,6 @@ export interface BrowserSessionOptions {
   profilePath: string;
   /** Launch headed (visible) browser — default true */
   headed?: boolean;
-  /** Additional Chromium launch args */
-  args?: string[];
   /**
    * Attach to an already-running Chrome via CDP instead of launching a
    * profile browser (e.g. "http://127.0.0.1:9222"). Shark opens a NEW TAB
@@ -82,7 +84,6 @@ export class BrowserSession {
   constructor(options: BrowserSessionOptions) {
     this.options = {
       headed: true,
-      args: [],
       cdpUrl: "",
       ...options,
     };
@@ -103,7 +104,7 @@ export class BrowserSession {
     const cdpUrl =
       this.options.cdpUrl === "none"
         ? ""
-        : (this.options.cdpUrl || (await ensureSharkChrome()) || "");
+        : this.options.cdpUrl || (await ensureSharkChrome()) || "";
     if (cdpUrl) {
       try {
         this.cdpBrowser = await chromium.connectOverCDP(cdpUrl);
@@ -121,7 +122,7 @@ export class BrowserSession {
       return this.context;
     }
 
-    const { profilePath, headed, args } = this.options;
+    const { profilePath, headed } = this.options;
 
     await mkdir(profilePath, { recursive: true });
 
@@ -137,21 +138,7 @@ export class BrowserSession {
     try {
       this.context = await chromium.launchPersistentContext(profilePath, {
         headless: !headed,
-        args: [
-          "--disable-blink-features=AutomationControlled",
-          "--disable-features=IsolateOrigins,site-per-process",
-          ...args,
-        ],
         viewport: { width: 1280, height: 900 },
-        bypassCSP: true,
-        ignoreHTTPSErrors: true,
-      });
-
-      // Remove webdriver flag from all pages to avoid bot detection
-      await this.context.addInitScript(() => {
-        Object.defineProperty(navigator, "webdriver", {
-          get: () => false,
-        });
       });
 
       return this.context;
@@ -170,14 +157,26 @@ export class BrowserSession {
     }
   }
 
+  /** Pages in the current context (empty if not launched). */
+  pages(): Page[] {
+    return this.context?.pages() ?? [];
+  }
+
   /** Get the current page or create a new one */
-  async getPage(options: { reuseUrlIncludes?: string } = {}): Promise<Page> {
+  async getPage(options: { reuseUrlIncludes?: string | string[] } = {}): Promise<Page> {
     const ctx = await this.launch();
+    const needles = (
+      Array.isArray(options.reuseUrlIncludes)
+        ? options.reuseUrlIncludes
+        : options.reuseUrlIncludes
+          ? [options.reuseUrlIncludes]
+          : []
+    ).filter(Boolean);
     // In attach mode work in a fresh tab — never hijack the user's — unless a
     // tab for this site should be reused (e.g. WhatsApp Web allows one tab only).
     if (this.attached) {
-      const existing = options.reuseUrlIncludes
-        ? ctx.pages().find((p) => p.url().includes(options.reuseUrlIncludes ?? ""))
+      const existing = needles.length
+        ? ctx.pages().find((p) => needles.some((needle) => p.url().includes(needle)))
         : undefined;
       const page = existing ?? (await ctx.newPage());
       await page.bringToFront().catch(() => {});

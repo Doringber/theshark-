@@ -18,6 +18,7 @@
             aria-label="הוספת תמונות"
           />
           <div id="photo-preview" aria-label="Photo preview"></div>
+          <span id="upload-count" aria-label="Upload count">0</span>
           <span aria-label="Photo recommendation">מומלץ 4-6 תמונות מזוויות שונות</span>
         </div>
         <div>
@@ -66,6 +67,11 @@
     </div>
 
     <script>
+      const photos = document.getElementById("photos");
+      photos.addEventListener("change", () => {
+        const count = document.getElementById("upload-count");
+        count.textContent = String(Number(count.textContent || "0") + 1);
+      });
       document.getElementById("publish-btn").addEventListener("click", () => {
         document.getElementById("product-form").style.display = "none";
         document.getElementById("result").style.display = "block";

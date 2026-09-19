@@ -40,11 +40,6 @@ export async function runAuth(options: AuthOptions): Promise<void> {
     profilePath,
     headed: true,
     cdpUrl: options.cdpUrl ?? "",
-    args: [
-      "--disable-blink-features=AutomationControlled",
-      "--disable-features=IsolateOrigins,site-per-process",
-      "--disable-web-security",
-    ],
   });
 
   try {
