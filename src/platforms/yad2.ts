@@ -128,13 +128,20 @@ export class Yad2Adapter extends BasePlatformAdapter {
     files: string[],
   ): Promise<DraftResult> {
     await page.goto(Y2_CREATE_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    // "Resume saved draft?" modal may appear first — always start fresh so a
-    // stale draft never leaks into a new listing.
-    await page
-      .getByRole("button", { name: "התחלה מחדש" })
-      .click({ timeout: 5_000 })
-      .catch(() => {});
+    // "Resume saved draft?" modal — always start fresh so a stale draft never
+    // leaks into a new listing. It can pop up a few seconds after the form
+    // renders, so poll for it rather than click once.
+    const startFresh = page.getByRole("button", { name: "התחלה מחדש" });
     const title = page.getByTestId("text-field-title");
+    const deadline = Date.now() + 8_000;
+    while (Date.now() < deadline) {
+      if (await startFresh.isVisible().catch(() => false)) {
+        await startFresh.click().catch(() => {});
+        await page.waitForTimeout(1_000);
+        break;
+      }
+      await page.waitForTimeout(400);
+    }
     // Bot check (hCaptcha) — never bypass: hand the tab to the user and wait.
     const captcha = page
       .getByText("Are you for real")
@@ -195,7 +202,18 @@ export class Yad2Adapter extends BasePlatformAdapter {
       };
     }
     await upload.setInputFiles(files);
-    await page.waitForTimeout(2_000);
+    await page.waitForTimeout(2_500);
+    const photoCount = await page
+      .locator('[data-testid="upload-input"]')
+      .locator("xpath=ancestor::*[3]")
+      .locator("img")
+      .count()
+      .catch(() => -1);
+    if (photoCount > files.length) {
+      this.reviewNotes.push(
+        `${photoCount} photos on the form but ${files.length} uploaded — a restored draft added extras; remove them`,
+      );
+    }
 
     await title.fill(listing.title);
 
