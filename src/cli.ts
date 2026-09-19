@@ -49,17 +49,53 @@ program
   .description("Run the interactive sale flow (dry-run by default)")
   .requiredOption("--image <paths...>", "One or more product image paths")
   .option("--publish", "Allow final submission (still requires interactive approval)")
-  .action(async (opts: { image: string[]; publish?: boolean }) => {
-    try {
-      await runSell({
-        images: opts.image,
-        publish: opts.publish ?? false,
-      });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error(`\n💀 ${msg}`);
-      process.exitCode = 1;
-    }
-  });
+  .option("--title <title>", "Product title (skip interactive prompt)")
+  .option("--price <price>", "Price in NIS (skip interactive prompt)")
+  .option("--description <desc>", "Description (skip interactive prompt)")
+  .option("--condition <condition>", "Condition: new, like_new, good, fair, poor")
+  .option("--location <location>", "City/area (skip interactive prompt)")
+  .option(
+    "--platforms <platforms>",
+    "Comma-separated platforms: facebook,whatsapp,yad2",
+  )
+  .option(
+    "--analysis-only <indices>",
+    "Comma-separated image indices (0-based) to mark as analysis_only",
+  )
+  .action(
+    async (opts: {
+      image: string[];
+      publish?: boolean;
+      title?: string;
+      price?: string;
+      description?: string;
+      condition?: string;
+      location?: string;
+      platforms?: string;
+      analysisOnly?: string;
+    }) => {
+      try {
+        await runSell({
+          images: opts.image,
+          publish: opts.publish ?? false,
+          title: opts.title,
+          price: opts.price ? Number(opts.price) : undefined,
+          description: opts.description,
+          condition: opts.condition as
+            "new" | "like_new" | "good" | "fair" | "poor" | undefined,
+          location: opts.location,
+          platforms: opts.platforms?.split(",").map((s) => s.trim()) as
+            Array<"facebook" | "whatsapp" | "yad2"> | undefined,
+          analysisOnlyIndices: opts.analysisOnly
+            ?.split(",")
+            .map((s) => parseInt(s.trim(), 10)),
+        });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error(`\n💀 ${msg}`);
+        process.exitCode = 1;
+      }
+    },
+  );
 
 program.parse();

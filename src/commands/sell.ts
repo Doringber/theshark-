@@ -28,6 +28,15 @@ const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 export interface SellOptions {
   images: string[];
   publish: boolean;
+  /** Pre-filled values for non-interactive mode */
+  title?: string;
+  price?: number;
+  description?: string;
+  condition?: "new" | "like_new" | "good" | "fair" | "poor";
+  location?: string;
+  platforms?: Array<"facebook" | "whatsapp" | "yad2">;
+  /** Image indices (0-based) to mark as analysis_only */
+  analysisOnlyIndices?: number[];
 }
 
 export interface SellResult {
@@ -247,6 +256,7 @@ async function selectPlatforms(config: SharkConfig): Promise<PlatformName[]> {
  */
 export async function runSell(options: SellOptions): Promise<SellResult> {
   const { images: imagePaths, publish } = options;
+  const isInteractive = !options.title || !options.price || !options.description;
 
   // 1. Validate images
   console.log("🔍 Validating images...");
@@ -258,34 +268,86 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
     }
     throw new Error("Image validation failed");
   }
-  console.log(`✅ ${imageResult.images.length} image(s) validated\n`);
+
+  // Mark analysis_only images
+  if (options.analysisOnlyIndices && options.analysisOnlyIndices.length > 0) {
+    for (const idx of options.analysisOnlyIndices) {
+      const img = imageResult.images[idx];
+      if (img) {
+        img.uploadState = "analysis_only";
+        console.log(
+          `  ⚠️  Image [${idx}] marked as analysis_only (contains sensitive data)`,
+        );
+      }
+    }
+  }
+
+  const uploadable = getUploadableImages(imageResult.images);
+  console.log(
+    `✅ ${imageResult.images.length} image(s) validated, ${uploadable.length} approved for upload\n`,
+  );
+
+  if (uploadable.length === 0) {
+    throw new Error(
+      "No images approved for upload — all marked analysis_only or replace_required",
+    );
+  }
 
   // 2. Load config
   const config = await resolveConfig();
 
-  // 3. Build listing interactively
-  const listing = await buildListing(imageResult.images, config);
+  // 3. Build listing (interactive or from flags)
+  let listing: ApprovedListing;
+  if (!isInteractive) {
+    listing = {
+      id: randomUUID(),
+      title: options.title ?? "",
+      description: options.description ?? "",
+      price: options.price ?? 0,
+      currency: "NIS",
+      condition: options.condition ?? "good",
+      location: options.location ?? "תל אביב",
+      language: config.language,
+      images: imageResult.images,
+      facts: [],
+    } as ApprovedListing;
+  } else {
+    listing = await buildListing(imageResult.images, config);
+  }
 
   // 4. Show preview
   showPreview(listing);
 
-  // 5. Confirm listing
-  const listingOk = await confirm({
-    message: "Does this listing look correct?",
-    default: true,
-  });
-  if (!listingOk) {
-    console.log("🚫 Listing cancelled by user");
-    return {
-      runId: "",
-      listingId: listing.id,
-      results: [],
-      dryRun: true,
-    };
+  // 5. Confirm listing (skip in non-interactive)
+  if (isInteractive) {
+    const listingOk = await confirm({
+      message: "Does this listing look correct?",
+      default: true,
+    });
+    if (!listingOk) {
+      console.log("🚫 Listing cancelled by user");
+      return {
+        runId: "",
+        listingId: listing.id,
+        results: [],
+        dryRun: true,
+      };
+    }
   }
 
   // 6. Select platforms
-  const platforms = await selectPlatforms(config);
+  let platforms: PlatformName[];
+  if (options.platforms && options.platforms.length > 0) {
+    platforms = options.platforms;
+    console.log(`📡 Platforms: ${platforms.join(", ")}`);
+  } else if (isInteractive) {
+    platforms = await selectPlatforms(config);
+  } else {
+    // Default: all enabled platforms
+    platforms = (["facebook", "whatsapp", "yad2"] as PlatformName[]).filter(
+      (p) => config.platforms[p].enabled,
+    );
+  }
   if (platforms.length === 0) {
     console.log("🚫 No platforms selected");
     return {
