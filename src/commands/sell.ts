@@ -37,6 +37,10 @@ export interface SellOptions {
   platforms?: Array<"facebook" | "whatsapp" | "yad2">;
   /** Image indices (0-based) to mark as analysis_only */
   analysisOnlyIndices?: number[];
+  /** Skip all interactive prompts — for AI agent / CI use */
+  autoApprove?: boolean;
+  /** Override config dryRun setting */
+  noDryRun?: boolean;
 }
 
 export interface SellResult {
@@ -256,7 +260,9 @@ async function selectPlatforms(config: SharkConfig): Promise<PlatformName[]> {
  */
 export async function runSell(options: SellOptions): Promise<SellResult> {
   const { images: imagePaths, publish } = options;
-  const isInteractive = !options.title || !options.price || !options.description;
+  const autoApprove = options.autoApprove ?? false;
+  const isInteractive =
+    !autoApprove && (!options.title || !options.price || !options.description);
 
   // 1. Validate images
   console.log("🔍 Validating images...");
@@ -367,29 +373,33 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
   console.log(`\n📝 Run created: ${run.id}`);
 
   // 8. Dry-run vs publish
-  const isDryRun = !publish || config.dryRun;
+  const isDryRun = options.noDryRun ? false : !publish || config.dryRun;
   if (isDryRun) {
     console.log("\n🏖️  DRY-RUN MODE — no submissions will be made");
     console.log(
       publish
-        ? "(config dryRun=true overrides --publish)"
+        ? "(config dryRun=true overrides --publish; use --no-dry-run to force)"
         : "(use --publish to enable real submissions)",
     );
   } else {
     console.log("\n⚡ PUBLISH MODE — submissions will be attempted");
-    const reallyPublish = await confirm({
-      message: "⚠️  You are about to publish to real platforms. Are you sure?",
-      default: false,
-    });
-    if (!reallyPublish) {
-      console.log("🚫 Publish cancelled by user");
-      await store.updateStatus(run.id, "cancelled");
-      return {
-        runId: run.id,
-        listingId: listing.id,
-        results: [],
-        dryRun: true,
-      };
+    if (!autoApprove) {
+      const reallyPublish = await confirm({
+        message: "⚠️  You are about to publish to real platforms. Are you sure?",
+        default: false,
+      });
+      if (!reallyPublish) {
+        console.log("🚫 Publish cancelled by user");
+        await store.updateStatus(run.id, "cancelled");
+        return {
+          runId: run.id,
+          listingId: listing.id,
+          results: [],
+          dryRun: true,
+        };
+      }
+    } else {
+      console.log("  🤖 Auto-approve enabled — skipping confirmation");
     }
   }
 
@@ -440,8 +450,15 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       const loginState = await adapter.verifyLogin(page);
       if (loginState === "login_required") {
         console.log(`  🔐 Login required on ${platform}. Please log in manually.`);
-        console.log("     Press Enter when you're logged in...");
-        await input({ message: "Press Enter to continue..." });
+        if (!autoApprove) {
+          console.log("     Press Enter when you're logged in...");
+          await input({ message: "Press Enter to continue..." });
+        } else {
+          console.log(
+            "  ⏳ Waiting 30 seconds for manual login (auto-approve mode)...",
+          );
+          await new Promise((r) => setTimeout(r, 30_000));
+        }
 
         const retryState = await adapter.verifyLogin(page);
         if (retryState !== "logged_in") {
@@ -456,18 +473,22 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
         }
       } else if (loginState === "unknown") {
         console.log(`  ⚠️  Cannot determine login state on ${platform}`);
-        const proceed = await confirm({
-          message: "Continue anyway?",
-          default: false,
-        });
-        if (!proceed) {
-          results.push({
-            status: "skipped",
-            destination: platform,
-            message: "Skipped — unknown login state",
+        if (!autoApprove) {
+          const proceed = await confirm({
+            message: "Continue anyway?",
+            default: false,
           });
-          await store.updateDestinationStatus(run.id, platform, platform, "skipped");
-          continue;
+          if (!proceed) {
+            results.push({
+              status: "skipped",
+              destination: platform,
+              message: "Skipped — unknown login state",
+            });
+            await store.updateDestinationStatus(run.id, platform, platform, "skipped");
+            continue;
+          }
+        } else {
+          console.log("  🤖 Auto-approve: continuing despite unknown login state");
         }
       }
 
@@ -491,20 +512,24 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
 
       // Per-destination approval
       const destination = preview.destinations[0] ?? platform;
-      const approveSubmit = await confirm({
-        message: `Submit to ${platform} → ${destination}?`,
-        default: false,
-      });
-
-      if (!approveSubmit) {
-        console.log(`  🚫 Submission to ${destination} declined`);
-        results.push({
-          status: "skipped",
-          destination,
-          message: "User declined submission",
+      if (!autoApprove) {
+        const approveSubmit = await confirm({
+          message: `Submit to ${platform} → ${destination}?`,
+          default: false,
         });
-        await store.updateDestinationStatus(run.id, platform, destination, "skipped");
-        continue;
+
+        if (!approveSubmit) {
+          console.log(`  🚫 Submission to ${destination} declined`);
+          results.push({
+            status: "skipped",
+            destination,
+            message: "User declined submission",
+          });
+          await store.updateDestinationStatus(run.id, platform, destination, "skipped");
+          continue;
+        }
+      } else {
+        console.log(`  🤖 Auto-approve: submitting to ${platform} → ${destination}`);
       }
 
       // Create fresh approval

@@ -49,6 +49,9 @@ program
   .description("Run the interactive sale flow (dry-run by default)")
   .requiredOption("--image <paths...>", "One or more product image paths")
   .option("--publish", "Allow final submission (still requires interactive approval)")
+  .option("--auto-approve", "Skip interactive prompts (for AI agent / CI use)")
+  .option("--dry-run", "Force dry-run (default: true)")
+  .option("--no-dry-run", "Override config dryRun — enable real submissions")
   .option("--title <title>", "Product title (skip interactive prompt)")
   .option("--price <price>", "Price in NIS (skip interactive prompt)")
   .option("--description <desc>", "Description (skip interactive prompt)")
@@ -66,6 +69,8 @@ program
     async (opts: {
       image: string[];
       publish?: boolean;
+      autoApprove?: boolean;
+      dryRun?: boolean;
       title?: string;
       price?: string;
       description?: string;
@@ -78,6 +83,8 @@ program
         await runSell({
           images: opts.image,
           publish: opts.publish ?? false,
+          autoApprove: opts.autoApprove ?? false,
+          noDryRun: opts.dryRun === false,
           title: opts.title,
           price: opts.price ? Number(opts.price) : undefined,
           description: opts.description,
