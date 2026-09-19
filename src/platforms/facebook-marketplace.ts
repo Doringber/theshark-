@@ -10,15 +10,33 @@ import type { ApprovalToken } from "../services/approvals.js";
 import { validateApproval } from "../services/approvals.js";
 import { getUploadableImages, validateUploadManifest } from "../domain/schemas.js";
 
+/** Map Shark condition values to real Facebook Marketplace option labels */
+const FB_CONDITION_LABEL: Record<string, string> = {
+  new: "New",
+  like_new: "Used - Like New",
+  good: "Used - Good",
+  fair: "Used - Fair",
+  // "poor" has no honest Facebook equivalent — handled as needs_mapping
+};
+
 export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
   readonly name = "facebook" as const;
 
   async verifyLogin(page: Page): Promise<"logged_in" | "login_required" | "unknown"> {
+    // Logged-in indicators: fixture ("User menu") + real FB ("Your profile")
     const userMenu = page.locator('[aria-label="User menu"]').first();
     if (await userMenu.isVisible().catch(() => false)) return "logged_in";
 
+    const yourProfile = page.locator('[aria-label="Your profile"]').first();
+    if (await yourProfile.isVisible().catch(() => false)) return "logged_in";
+
     const home = page.locator('[aria-label="Home"]').first();
-    if (await home.isVisible().catch(() => false)) return "logged_in";
+    if (await home.isVisible().catch(() => false)) {
+      // Home nav exists on real FB header even when logged out, so only
+      // treat it as logged-in when no login form is present.
+      const pwd = page.locator('input[type="password"]').first();
+      if (!(await pwd.isVisible().catch(() => false))) return "logged_in";
+    }
 
     const loginForm = page.locator('[aria-label="Login form"]').first();
     if (await loginForm.isVisible().catch(() => false)) return "login_required";
@@ -97,11 +115,51 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
         await locationField.fill(listing.location);
       }
 
-      // Upload photos (set file input)
+      // Condition — fixture uses a native select, real FB uses a custom combobox
+      const condLabel = FB_CONDITION_LABEL[listing.condition];
+      if (!condLabel) {
+        return {
+          success: false,
+          needsMapping: true,
+          error: `Condition "${listing.condition}" has no Facebook equivalent — needs_mapping`,
+        };
+      }
+      const nativeCond = page.locator('select[aria-label="Condition"]');
+      if (await nativeCond.isVisible().catch(() => false)) {
+        await nativeCond.selectOption(listing.condition);
+      } else {
+        const combo = page
+          .locator('[role="combobox"]', { hasText: /Condition/ })
+          .first();
+        if (await combo.isVisible().catch(() => false)) {
+          await combo.click();
+          const dialog = page.locator('[role="dialog"], [role="listbox"]');
+          const option = dialog.getByText(condLabel, { exact: true }).first();
+          if (!(await option.isVisible().catch(() => false))) {
+            return {
+              success: false,
+              needsMapping: true,
+              error: `Condition option "${condLabel}" not found — needs_mapping`,
+            };
+          }
+          await option.click();
+        }
+        // If no condition control is present, leave it — Category/Condition
+        // pickers vary by account and are user-confirmed at preview time.
+      }
+
+      // Upload photos — fixture labels its file input, real FB hides bare
+      // input[type="file"] elements behind the "Add photos" dropzone
       const photoInput = page.getByLabel("Add photos");
       if (await photoInput.isVisible().catch(() => false)) {
         const filePaths = uploadable.map((img) => img.path);
         await photoInput.setInputFiles(filePaths);
+      } else {
+        const fileInput = page.locator('input[type="file"]').first();
+        if ((await fileInput.count().catch(() => 0)) > 0) {
+          const filePaths = uploadable.map((img) => img.path);
+          await fileInput.setInputFiles(filePaths);
+        }
       }
 
       return { success: true };

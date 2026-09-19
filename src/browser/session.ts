@@ -53,9 +53,23 @@ export class BrowserSession {
     try {
       this.context = await chromium.launchPersistentContext(profilePath, {
         headless: !headed,
-        args: ["--disable-blink-features=AutomationControlled", ...args],
+        args: [
+          "--disable-blink-features=AutomationControlled",
+          "--disable-features=IsolateOrigins,site-per-process",
+          ...args,
+        ],
         viewport: { width: 1280, height: 900 },
+        bypassCSP: true,
+        ignoreHTTPSErrors: true,
       });
+
+      // Remove webdriver flag from all pages to avoid bot detection
+      await this.context.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", {
+          get: () => false,
+        });
+      });
+
       return this.context;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
