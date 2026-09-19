@@ -34,6 +34,7 @@ export interface SellOptions {
   description?: string;
   condition?: "new" | "like_new" | "good" | "fair" | "poor";
   location?: string;
+  category?: string;
   platforms?: Array<"facebook" | "whatsapp" | "yad2">;
   /** Image indices (0-based) to mark as analysis_only */
   analysisOnlyIndices?: number[];
@@ -196,6 +197,11 @@ async function buildListing(
     validate: (v) => (v.trim().length > 0 ? true : "Location is required"),
   });
 
+  const category = await input({
+    message: "Category (as shown on Facebook, e.g. Furniture):",
+    validate: (v) => (v.trim().length > 0 ? true : "Category is required"),
+  });
+
   return {
     id: randomUUID(),
     title: title.trim(),
@@ -204,6 +210,7 @@ async function buildListing(
     currency: "NIS",
     condition,
     location: location.trim(),
+    category: category.trim(),
     language: config.language,
     images,
     facts: [],
@@ -313,6 +320,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       currency: "NIS",
       condition: options.condition ?? "good",
       location: options.location ?? "תל אביב",
+      category: options.category,
       language: config.language,
       images: imageResult.images,
       facts: [],

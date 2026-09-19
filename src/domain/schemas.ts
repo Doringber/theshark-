@@ -81,6 +81,8 @@ export const ListingSchema = z
     condition: ItemCondition,
     /** City or area — user-confirmed */
     location: z.string().min(1, "Location is required"),
+    /** Marketplace category (e.g. "Furniture") — user-confirmed */
+    category: z.string().optional(),
     /** Known defects or missing parts */
     defects: z.string().optional(),
     /** Pickup/delivery details */

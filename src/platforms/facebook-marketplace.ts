@@ -115,6 +115,32 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
         await locationField.fill(listing.location);
       }
 
+      // Category — fixture uses a native select, real FB uses a dialog picker.
+      // Optional: skipped when the listing has no category.
+      if (listing.category) {
+        const nativeCat = page.locator('select[aria-label="Category"]');
+        if (await nativeCat.isVisible().catch(() => false)) {
+          await nativeCat.selectOption(listing.category).catch(() => {});
+        } else {
+          const catCombo = page
+            .locator('[role="combobox"]', { hasText: /Category/ })
+            .first();
+          if (await catCombo.isVisible().catch(() => false)) {
+            await catCombo.click();
+            const dialog = page.locator('[role="dialog"], [role="listbox"]');
+            const catOpt = dialog.getByText(listing.category, { exact: true }).first();
+            if (!(await catOpt.isVisible().catch(() => false))) {
+              return {
+                success: false,
+                needsMapping: true,
+                error: `Category "${listing.category}" not found — needs_mapping`,
+              };
+            }
+            await catOpt.click();
+          }
+        }
+      }
+
       // Condition — fixture uses a native select, real FB uses a custom combobox
       const condLabel = FB_CONDITION_LABEL[listing.condition];
       if (!condLabel) {
@@ -232,8 +258,17 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       };
     }
 
-    // Click Publish
-    const publishBtn = page.getByRole("button", { name: "Publish" });
+    // Click Publish (real FB shows Next first — advance past it)
+    let publishBtn = page.getByRole("button", { name: "Publish" });
+    if (!(await publishBtn.isVisible().catch(() => false))) {
+      const nextBtn = page.getByRole("button", { name: "Next" });
+      if (await nextBtn.isVisible().catch(() => false)) {
+        await nextBtn.click();
+        await page.waitForLoadState("domcontentloaded").catch(() => {});
+        await page.waitForTimeout(2000);
+        publishBtn = page.getByRole("button", { name: "Publish" });
+      }
+    }
     if (!(await publishBtn.isVisible().catch(() => false))) {
       return {
         status: "needs_mapping",
