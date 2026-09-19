@@ -4,10 +4,9 @@ import { redact, redactUrl } from "../../src/services/redaction.js";
 describe("Redaction", () => {
   describe("redact", () => {
     it("redacts bearer tokens", () => {
-      const input =
-        "Authorization: Bearer eyJFQUtFIjoiVEVTVCJ9.fakepayload.fakesig";
+      const input = "Authorization: Bearer FAKE_TOKEN_FOR_UNIT_TEST";
       const result = redact(input);
-      expect(result).not.toContain("eyJFQUtFIjoiVEVTVCJ9");
+      expect(result).not.toContain("FAKE_TOKEN_FOR_UNIT_TEST");
       expect(result).toContain("[REDACTED");
     });
 
@@ -85,10 +84,10 @@ describe("Redaction", () => {
     });
 
     it("handles multiple sensitive values in one string", () => {
-      const input = "Token: Bearer abc123 | Cookie: sess=xyz | Email: a@b.com";
+      const input =
+        "Token: Bearer FAKETEST | Cookie: sess=FAKETEST | Email: a@b.com";
       const result = redact(input);
-      expect(result).not.toContain("abc123");
-      expect(result).not.toContain("xyz");
+      expect(result).not.toContain("FAKETEST");
       expect(result).not.toContain("a@b.com");
     });
   });
@@ -143,9 +142,9 @@ describe("Redaction", () => {
 
   describe("Request header redaction", () => {
     it("redacts authorization headers", () => {
-      const input = "Authorization: Basic ZmFrZTpmYWtl";
+      const input = "Authorization: Basic FAKE_BASIC_FOR_TEST";
       const result = redact(input);
-      expect(result).not.toContain("ZmFrZTpmYWtl");
+      expect(result).not.toContain("FAKE_BASIC_FOR_TEST");
     });
 
     it("redacts x-api-key headers", () => {
