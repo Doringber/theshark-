@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FakeYad2 — Product Form — Fixture</title>
+  </head>
+  <body>
+    <div id="product-form" role="main" aria-label="Product form">
+      <h1>פרטי המוצר</h1>
+      <form aria-label="Product details">
+        <div>
+          <label for="photos">תמונות</label>
+          <input
+            id="photos"
+            type="file"
+            multiple
+            accept="image/*"
+            aria-label="הוספת תמונות"
+          />
+          <div id="photo-preview" aria-label="Photo preview"></div>
+          <span aria-label="Photo recommendation">מומלץ 4-6 תמונות מזוויות שונות</span>
+        </div>
+        <div>
+          <label for="title">כותרת</label>
+          <input id="title" type="text" required aria-label="כותרת" />
+        </div>
+        <div>
+          <label for="price">מחיר</label>
+          <input id="price" type="number" required aria-label="מחיר" />
+        </div>
+        <div>
+          <label for="subcategory">קטגוריה</label>
+          <select id="subcategory" aria-label="קטגוריה">
+            <option value="">בחר קטגוריה</option>
+            <option value="computers">מחשבים</option>
+            <option value="phones">טלפונים</option>
+            <option value="furniture">ריהוט</option>
+          </select>
+        </div>
+        <div>
+          <label for="condition">מצב</label>
+          <select id="condition" aria-label="מצב">
+            <option value="new">חדש</option>
+            <option value="like_new">כמו חדש</option>
+            <option value="good">טוב</option>
+            <option value="fair">סביר</option>
+          </select>
+        </div>
+        <div>
+          <label for="description">תיאור</label>
+          <textarea id="description" aria-label="תיאור"></textarea>
+        </div>
+        <div>
+          <label for="city">עיר</label>
+          <input id="city" type="text" aria-label="עיר" />
+        </div>
+        <button type="button" id="publish-btn" role="button" aria-label="פרסום">
+          פרסום
+        </button>
+      </form>
+    </div>
+
+    <!-- Result tracking -->
+    <div id="result" style="display: none" aria-label="Result">
+      <span id="publish-status">not_published</span>
+    </div>
+
+    <script>
+      document.getElementById("publish-btn").addEventListener("click", () => {
+        document.getElementById("product-form").style.display = "none";
+        document.getElementById("result").style.display = "block";
+        document.getElementById("publish-status").textContent = "published";
+      });
+    </script>
+  </body>
+</html>

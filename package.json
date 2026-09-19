@@ -1,0 +1,51 @@
+{
+  "name": "shark",
+  "version": "0.1.0",
+  "description": "Local CLI tool for cross-posting second-hand product listings",
+  "type": "module",
+  "bin": {
+    "shark": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "lint": "eslint src/ tests/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "playwright test"
+  },
+  "keywords": [
+    "marketplace",
+    "cli",
+    "second-hand",
+    "listing"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "uuid": "^14.0.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@inquirer/prompts": "^8.7.2",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.1",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.8",
+    "serve": "^14.2.6",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.1"
+  }
+}

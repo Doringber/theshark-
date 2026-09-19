@@ -1,0 +1,21 @@
+{
+  "$schema": "./shark.config.schema.json",
+  "language": "he",
+  "dryRun": true,
+  "currency": "NIS",
+  "browserProfilePath": "~/.shark/browser-profile",
+  "platforms": {
+    "facebook": {
+      "enabled": true,
+      "url": "https://www.facebook.com"
+    },
+    "whatsapp": {
+      "enabled": true,
+      "url": "https://web.whatsapp.com"
+    },
+    "yad2": {
+      "enabled": true,
+      "url": "https://www.yad2.co.il"
+    }
+  }
+}
