@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { loadConfig } from "../domain/config.js";
+import { CHROME_BIN, SHARK_CDP_URL, SHARK_CHROME_DIR } from "../browser/session.js";
 
 interface CheckResult {
   name: string;
@@ -75,20 +76,51 @@ export async function runDoctor(): Promise<void> {
     });
   }
 
-  // Browser profile
-  const profilePath = resolve(
-    (process.env["SHARK_BROWSER_PROFILE"] ?? "~/.shark/browser-profile").replace(
-      "~",
-      process.env["HOME"] ?? "~",
-    ),
-  );
+  // Shared Shark Chrome (attach target)
+  const chromeInstalled = existsSync(CHROME_BIN);
+  let cdpUp: boolean;
+  try {
+    const res = await fetch(`${SHARK_CDP_URL}/json/version`, {
+      signal: AbortSignal.timeout(1500),
+    });
+    cdpUp = res.ok;
+  } catch {
+    cdpUp = false;
+  }
   checks.push({
-    name: "Browser profile",
-    status: existsSync(profilePath) ? "ok" : "warn",
-    detail: existsSync(profilePath)
-      ? profilePath
-      : `${profilePath} (will be created on first run)`,
+    name: "Google Chrome",
+    status: chromeInstalled ? "ok" : "fail",
+    detail: chromeInstalled
+      ? CHROME_BIN
+      : "Not found at /Applications — install Google Chrome",
   });
+  checks.push({
+    name: "Shark Chrome",
+    status: cdpUp ? "ok" : "warn",
+    detail: cdpUp
+      ? `running (${SHARK_CDP_URL}), profile ${SHARK_CHROME_DIR}`
+      : `not running — starts automatically on the next command (profile ${SHARK_CHROME_DIR})`,
+  });
+  if (cdpUp) {
+    // Which sites already have a session? Cheap check: does a tab exist for them.
+    try {
+      const tabs = (await (await fetch(`${SHARK_CDP_URL}/json`)).json()) as Array<{
+        url: string;
+      }>;
+      const open = ["facebook.com", "web.whatsapp.com", "yad2.co.il"].filter((h) =>
+        tabs.some((t) => t.url.includes(h)),
+      );
+      checks.push({
+        name: "Open site tabs",
+        status: "ok",
+        detail: open.length
+          ? open.join(", ")
+          : "none (run: shark auth --platform <name>)",
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Print results
   const icons = { ok: "✅", warn: "⚠️ ", fail: "❌" };

@@ -9,3 +9,8 @@ browser-profile/
 
 # Personal config (address etc.)
 shark.config.json
+
+# Test artifacts
+results.json
+test-results/
+.vitest/

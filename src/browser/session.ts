@@ -9,7 +9,7 @@ import { homedir } from "node:os";
 export const SHARK_CDP_URL = "http://localhost:9222";
 /** Where the shared Shark Chrome keeps its logins (all platforms in one) */
 export const SHARK_CHROME_DIR = join(homedir(), ".shark", "chrome");
-const CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+export const CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 async function cdpAlive(url: string): Promise<boolean> {
   try {

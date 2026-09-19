@@ -140,9 +140,7 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
           await locationField.fill(listing.location);
           await page.waitForTimeout(2000);
           // Accept the top autocomplete match, if any appeared.
-          const suggestion = page
-            .locator('[role="option"], [role="menuitem"]')
-            .first();
+          const suggestion = page.locator('[role="option"], [role="menuitem"]').first();
           if (await suggestion.isVisible().catch(() => false)) {
             await suggestion.click().catch(() => {});
           } else {
@@ -164,15 +162,38 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
           if (await catCombo.isVisible().catch(() => false)) {
             await catCombo.click();
             const dialog = page.locator('[role="dialog"], [role="listbox"]');
-            const catOpt = dialog.getByText(listing.category, { exact: true }).first();
-            if (!(await catOpt.isVisible().catch(() => false))) {
+            await dialog
+              .first()
+              .waitFor({ timeout: 5_000 })
+              .catch(() => {});
+            // Real FB: options are role=button, e.g. "Electronics & computers"
+            // (+ a "Shipping available" badge). Match exact → prefix → contains.
+            const options = dialog.locator('[role="button"], [role="option"]');
+            const names = (await options.allInnerTexts()).map((t) =>
+              t
+                .replace(/\s*Shipping available\s*$/i, "")
+                .replace(/\s+/g, " ")
+                .trim(),
+            );
+            const want = listing.category.trim().toLowerCase();
+            const idx =
+              names.findIndex((n) => n.toLowerCase() === want) >= 0
+                ? names.findIndex((n) => n.toLowerCase() === want)
+                : names.findIndex((n) => n.toLowerCase().startsWith(want)) >= 0
+                  ? names.findIndex((n) => n.toLowerCase().startsWith(want))
+                  : names.findIndex((n) => n.toLowerCase().includes(want));
+            if (idx < 0) {
+              await page.keyboard.press("Escape").catch(() => {});
               return {
                 success: false,
                 needsMapping: true,
-                error: `Category "${listing.category}" not found — needs_mapping`,
+                error: `Category "${listing.category}" not found — available: ${names
+                  .filter(Boolean)
+                  .join(" | ")}`,
               };
             }
-            await catOpt.click();
+            await options.nth(idx).click();
+            await page.waitForTimeout(800);
           }
         }
       }
@@ -215,35 +236,65 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       // loses its "for" association, so fall back to a container-scoped fill.
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await page.waitForTimeout(2000);
+      // Some layouts collapse Description under "More details".
+      const descProbe = page.getByLabel("Description");
+      if (!(await descProbe.isVisible().catch(() => false))) {
+        const moreBtn = page.getByRole("button", { name: /More details/i }).first();
+        if (await moreBtn.isVisible().catch(() => false)) {
+          await moreBtn.click().catch(() => {});
+        } else {
+          await page
+            .getByText("More details", { exact: true })
+            .first()
+            .evaluate((el) => {
+              const target =
+                (el.closest('[role="button"]') as HTMLElement | null) ??
+                (el as HTMLElement);
+              target.click();
+            })
+            .catch(() => {});
+        }
+        await page.waitForTimeout(1200);
+      }
       const descInput = page.getByLabel("Description");
       await descInput.waitFor({ timeout: 10_000 }).catch(() => {});
       if (await descInput.isVisible().catch(() => false)) {
         await descInput.fill(listing.description);
       } else {
         const filled = await page
-          .evaluate(
-            (text) => {
-              const labels = Array.from(document.querySelectorAll("label"));
-              const lab = labels.find(
-                (l) => (l.innerText || "").trim() === "Description",
-              );
-              const ta =
-                lab?.parentElement?.querySelector("textarea") ?? null;
-              if (!ta) return false;
-              const setter = Object.getOwnPropertyDescriptor(
-                window.HTMLTextAreaElement.prototype,
-                "value",
-              )?.set;
-              if (setter) setter.call(ta, text);
-              else ta.value = text;
-              ta.dispatchEvent(new Event("input", { bubbles: true }));
-              ta.dispatchEvent(new Event("change", { bubbles: true }));
-              return true;
-            },
-            listing.description,
-          )
+          .evaluate((text) => {
+            const labels = Array.from(document.querySelectorAll("label"));
+            const lab = labels.find(
+              (l) => (l.innerText || "").trim() === "Description",
+            );
+            const ta =
+              lab?.parentElement?.querySelector("textarea") ??
+              lab?.closest("div")?.querySelector("textarea") ??
+              Array.from(document.querySelectorAll("textarea")).find((t) => {
+                const r = t.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+              }) ??
+              null;
+            if (!ta) return false;
+            ta.focus();
+            const setter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype,
+              "value",
+            )?.set;
+            if (setter) setter.call(ta, text);
+            else ta.value = text;
+            ta.dispatchEvent(new Event("input", { bubbles: true }));
+            ta.dispatchEvent(new Event("change", { bubbles: true }));
+            return true;
+          }, listing.description)
           .catch(() => false);
         if (!filled) {
+          await page
+            .screenshot({
+              path: ".shark/snapshots/fb-description-fail.png",
+              fullPage: true,
+            })
+            .catch(() => {});
           return {
             success: false,
             needsMapping: true,
@@ -328,7 +379,9 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
 
       const disabled = await nextBtn.getAttribute("aria-disabled").catch(() => null);
       if (disabled === "true") {
-        await page.screenshot({ path: ".shark/snapshots/fb-next-disabled.png" }).catch(() => {});
+        await page
+          .screenshot({ path: ".shark/snapshots/fb-next-disabled.png" })
+          .catch(() => {});
         return {
           status: "needs_mapping",
           destination: "marketplace",
@@ -407,27 +460,28 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
     let selectedGroups: string[] = [];
     if (this.targetGroups.length > 0) {
       const groupResult = await page
-        .evaluate((names: string[]): { missing: string[]; unchecked: string[]; selected: string[] } => {
-          const boxes = Array.from(
-            document.querySelectorAll('[role="checkbox"]'),
-          );
-          const missing: string[] = [];
-          const selected: string[] = [];
-          for (const name of names) {
-            const box = boxes.find((b) =>
-              (b.textContent || "").includes(name),
-            );
-            if (!box) {
-              missing.push(name);
-              continue;
+        .evaluate(
+          (
+            names: string[],
+          ): { missing: string[]; unchecked: string[]; selected: string[] } => {
+            const boxes = Array.from(document.querySelectorAll('[role="checkbox"]'));
+            const missing: string[] = [];
+            const selected: string[] = [];
+            for (const name of names) {
+              const box = boxes.find((b) => (b.textContent || "").includes(name));
+              if (!box) {
+                missing.push(name);
+                continue;
+              }
+              if (box.getAttribute("aria-checked") !== "true") {
+                (box as HTMLElement).click();
+              }
+              selected.push(name);
             }
-            if (box.getAttribute("aria-checked") !== "true") {
-              (box as HTMLElement).click();
-            }
-            selected.push(name);
-          }
-          return { missing, unchecked: [], selected };
-        }, this.targetGroups)
+            return { missing, unchecked: [], selected };
+          },
+          this.targetGroups,
+        )
         .catch(() => ({
           missing: [...this.targetGroups],
           unchecked: [] as string[],
@@ -446,13 +500,9 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       await page.waitForTimeout(1500);
       const verify = await page
         .evaluate((names: string[]): string[] => {
-          const boxes = Array.from(
-            document.querySelectorAll('[role="checkbox"]'),
-          );
+          const boxes = Array.from(document.querySelectorAll('[role="checkbox"]'));
           return names.filter((name) => {
-            const box = boxes.find((b) =>
-              (b.textContent || "").includes(name),
-            );
+            const box = boxes.find((b) => (b.textContent || "").includes(name));
             return !box || box.getAttribute("aria-checked") !== "true";
           });
         }, groupResult.selected)
@@ -556,13 +606,14 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       return { status: "published", destination };
     }
 
-    await page.screenshot({ path: ".shark/snapshots/fb-after-publish.png" }).catch(() => {});
+    await page
+      .screenshot({ path: ".shark/snapshots/fb-after-publish.png" })
+      .catch(() => {});
     const hint = chatter.dialog ? ` Facebook says: "${chatter.dialog}"` : "";
     return {
       status: "unknown_submission_state",
       destination,
-      message:
-        `Publish clicked but result is uncertain.${hint} Screenshot at .shark/snapshots/fb-after-publish.png, check your Marketplace listings`,
+      message: `Publish clicked but result is uncertain.${hint} Screenshot at .shark/snapshots/fb-after-publish.png, check your Marketplace listings`,
     };
   }
 }
