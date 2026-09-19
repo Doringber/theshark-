@@ -83,6 +83,8 @@ export const ListingSchema = z
     location: z.string().min(1, "Location is required"),
     /** Marketplace category (e.g. "Furniture") — user-confirmed */
     category: z.string().optional(),
+    /** Facebook groups to cross-post to (exact names) — user-confirmed */
+    groups: z.array(z.string()).optional(),
     /** Known defects or missing parts */
     defects: z.string().optional(),
     /** Pickup/delivery details */

@@ -22,6 +22,13 @@ const FB_CONDITION_LABEL: Record<string, string> = {
 export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
   readonly name = "facebook" as const;
 
+  /**
+   * Facebook groups to cross-post to (exact names as shown in the
+   * "List in your groups" panel). Set by the sell orchestrator from
+   * explicit user input. Empty = Marketplace only.
+   */
+  targetGroups: string[] = [];
+
   async verifyLogin(page: Page): Promise<"logged_in" | "login_required" | "unknown"> {
     // Logged-in indicators: fixture ("User menu") + real FB ("Your profile")
     const userMenu = page.locator('[aria-label="User menu"]').first();
@@ -394,6 +401,73 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       await page.waitForTimeout(3000);
     }
 
+    // Cross-post to requested groups. Rows are DIV role=checkbox with
+    // text "<name><members> members · <privacy>". A requested group that
+    // cannot be found (or won't check) fails closed — never silently skip.
+    let selectedGroups: string[] = [];
+    if (this.targetGroups.length > 0) {
+      const groupResult = await page
+        .evaluate((names: string[]): { missing: string[]; unchecked: string[]; selected: string[] } => {
+          const boxes = Array.from(
+            document.querySelectorAll('[role="checkbox"]'),
+          );
+          const missing: string[] = [];
+          const selected: string[] = [];
+          for (const name of names) {
+            const box = boxes.find((b) =>
+              (b.textContent || "").includes(name),
+            );
+            if (!box) {
+              missing.push(name);
+              continue;
+            }
+            if (box.getAttribute("aria-checked") !== "true") {
+              (box as HTMLElement).click();
+            }
+            selected.push(name);
+          }
+          return { missing, unchecked: [], selected };
+        }, this.targetGroups)
+        .catch(() => ({
+          missing: [...this.targetGroups],
+          unchecked: [] as string[],
+          selected: [] as string[],
+        }));
+
+      if (groupResult.missing.length > 0) {
+        return {
+          status: "needs_mapping",
+          destination: "marketplace",
+          message: `Groups not found on destination screen: ${groupResult.missing.join(", ")} — needs_mapping`,
+        };
+      }
+
+      // Verify the checks actually stuck.
+      await page.waitForTimeout(1500);
+      const verify = await page
+        .evaluate((names: string[]): string[] => {
+          const boxes = Array.from(
+            document.querySelectorAll('[role="checkbox"]'),
+          );
+          return names.filter((name) => {
+            const box = boxes.find((b) =>
+              (b.textContent || "").includes(name),
+            );
+            return !box || box.getAttribute("aria-checked") !== "true";
+          });
+        }, groupResult.selected)
+        .catch(() => [...groupResult.selected]);
+
+      if (verify.length > 0) {
+        return {
+          status: "needs_mapping",
+          destination: "marketplace",
+          message: `Groups would not stay selected: ${verify.join(", ")} — refusing partial cross-post`,
+        };
+      }
+      selectedGroups = groupResult.selected;
+    }
+
     // Read selected destinations from checkboxes (present on later steps)
     const destinations: string[] = [];
     const checkboxes = page.locator('input[name="dest"]:checked');
@@ -402,7 +476,11 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       const val = await checkboxes.nth(i).getAttribute("value");
       if (val) destinations.push(val);
     }
-    const destination = destinations.join(",") || "marketplace";
+    const baseDestination = destinations.join(",") || "marketplace";
+    const destination =
+      selectedGroups.length > 0
+        ? [baseDestination, ...selectedGroups].join(",")
+        : baseDestination;
 
     // Validate the approval token
     const validationResult = validateApproval(approval, {

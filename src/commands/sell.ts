@@ -35,6 +35,8 @@ export interface SellOptions {
   condition?: "new" | "like_new" | "good" | "fair" | "poor";
   location?: string;
   category?: string;
+  /** Facebook groups to cross-post to (exact names as shown on Facebook) */
+  groups?: string[];
   platforms?: Array<"facebook" | "whatsapp" | "yad2">;
   /** Image indices (0-based) to mark as analysis_only */
   analysisOnlyIndices?: number[];
@@ -202,6 +204,11 @@ async function buildListing(
     validate: (v) => (v.trim().length > 0 ? true : "Category is required"),
   });
 
+  const groupsRaw = await input({
+    message: "Facebook groups (comma-separated exact names, blank for none):",
+    default: "",
+  });
+
   return {
     id: randomUUID(),
     title: title.trim(),
@@ -211,6 +218,10 @@ async function buildListing(
     condition,
     location: location.trim(),
     category: category.trim(),
+    groups: groupsRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
     language: config.language,
     images,
     facts: [],
@@ -321,6 +332,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       condition: options.condition ?? "good",
       location: options.location ?? "תל אביב",
       category: options.category,
+      groups: options.groups,
       language: config.language,
       images: imageResult.images,
       facts: [],
@@ -421,6 +433,13 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
     console.log("─".repeat(40));
 
     const adapter = getAdapter(platform);
+    if (
+      adapter instanceof FacebookMarketplaceAdapter &&
+      options.groups &&
+      options.groups.length > 0
+    ) {
+      adapter.targetGroups = options.groups;
+    }
 
     if (isDryRun) {
       console.log(`  📋 Would prepare draft on ${platform}`);
@@ -521,8 +540,16 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       const preview = await adapter.preview(page);
       console.log(`  📋 Preview: "${preview.title}" at ₪${preview.price}`);
 
-      // Per-destination approval
-      const destination = preview.destinations[0] ?? platform;
+      // Per-destination approval (groups expand the destination binding)
+      const baseDestination = preview.destinations[0] ?? platform;
+      const requestedGroups =
+        platform === "facebook" ? (options.groups ?? []) : [];
+      const destination = requestedGroups.length
+        ? ["marketplace", ...requestedGroups].join(",")
+        : baseDestination;
+      if (requestedGroups.length) {
+        console.log(`  👥 Groups: ${requestedGroups.join(", ")}`);
+      }
       if (!autoApprove) {
         const approveSubmit = await confirm({
           message: `Submit to ${platform} → ${destination}?`,

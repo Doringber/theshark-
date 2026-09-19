@@ -90,6 +90,7 @@ program
   .option("--condition <condition>", "Condition: new, like_new, good, fair, poor")
   .option("--location <location>", "City/area (skip interactive prompt)")
   .option("--category <category>", "Facebook category, e.g. Furniture")
+  .option("--groups <names>", "Comma-separated Facebook group names to cross-post to")
   .option(
     "--platforms <platforms>",
     "Comma-separated platforms: facebook,whatsapp,yad2",
@@ -110,6 +111,7 @@ program
       condition?: string;
       location?: string;
       category?: string;
+      groups?: string;
       platforms?: string;
       analysisOnly?: string;
     }) => {
@@ -126,6 +128,7 @@ program
             "new" | "like_new" | "good" | "fair" | "poor" | undefined,
           location: opts.location,
           category: opts.category,
+          groups: opts.groups?.split(",").map((s) => s.trim()).filter(Boolean),
           platforms: opts.platforms?.split(",").map((s) => s.trim()) as
             Array<"facebook" | "whatsapp" | "yad2"> | undefined,
           analysisOnlyIndices: opts.analysisOnly
