@@ -52,7 +52,9 @@ export class Yad2Adapter extends BasePlatformAdapter {
     if (await publish.isVisible().catch(() => false)) return "logged_in";
 
     const login = page
-      .locator('[aria-label="התחברות"], a:has-text("התחברות"), button:has-text("התחברות")')
+      .locator(
+        '[aria-label="התחברות"], a:has-text("התחברות"), button:has-text("התחברות")',
+      )
       .first();
     if (await login.isVisible().catch(() => false)) return "login_required";
 
@@ -74,9 +76,17 @@ export class Yad2Adapter extends BasePlatformAdapter {
       }
 
       if (isRealYad2(page)) {
-        return await this.prepareRealDraft(page, listing, uploadable.map((i) => i.path));
+        return await this.prepareRealDraft(
+          page,
+          listing,
+          uploadable.map((i) => i.path),
+        );
       }
-      return await this.prepareFixtureDraft(page, listing, uploadable.map((i) => i.path));
+      return await this.prepareFixtureDraft(
+        page,
+        listing,
+        uploadable.map((i) => i.path),
+      );
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       return { success: false, error: msg };
@@ -92,7 +102,9 @@ export class Yad2Adapter extends BasePlatformAdapter {
   ): Promise<boolean> {
     const field = page.getByTestId(testId);
     const option = page
-      .locator('ul[class*="autocomplete-list"][role="listbox"] [data-testid="dropdown-item"]:visible')
+      .locator(
+        'ul[class*="autocomplete-list"][role="listbox"] [data-testid="dropdown-item"]:visible',
+      )
       .first();
     for (let i = 0; i < attempts; i++) {
       await field.click();
@@ -124,18 +136,38 @@ export class Yad2Adapter extends BasePlatformAdapter {
       .catch(() => {});
     const title = page.getByTestId("text-field-title");
     // Bot check (hCaptcha) — never bypass: hand the tab to the user and wait.
-    const captcha = page.getByText("Are you for real").or(page.locator('iframe[src*="hcaptcha"]'));
-    if (await captcha.first().isVisible({ timeout: 3_000 }).catch(() => false)) {
+    const captcha = page
+      .getByText("Are you for real")
+      .or(page.locator('iframe[src*="hcaptcha"]'));
+    if (
+      await captcha
+        .first()
+        .isVisible({ timeout: 3_000 })
+        .catch(() => false)
+    ) {
       await page.bringToFront().catch(() => {});
-      console.log("  🤖 Yad2 is showing a captcha — please solve it in the Shark Chrome tab (waiting up to 3 min)...");
+      console.log(
+        "  🤖 Yad2 is showing a captcha — please solve it in the Shark Chrome tab (waiting up to 3 min)...",
+      );
       await title.waitFor({ state: "attached", timeout: 180_000 }).catch(() => {});
+      if (!(await title.count())) {
+        return {
+          success: false,
+          needsMapping: false,
+          error:
+            'captcha: Yad2 bot check not solved — the tab stays open; tick "I am human" there and re-run',
+        };
+      }
     }
     try {
       await title.waitFor({ state: "attached", timeout: 30_000 });
       await title.scrollIntoViewIfNeeded().catch(() => {});
     } catch {
       await page
-        .screenshot({ path: ".shark/snapshots/yad2-form-load-fail.png", fullPage: true })
+        .screenshot({
+          path: ".shark/snapshots/yad2-form-load-fail.png",
+          fullPage: true,
+        })
         .catch(() => {});
       return {
         success: false,
@@ -208,10 +240,14 @@ export class Yad2Adapter extends BasePlatformAdapter {
           await item.click();
         } else {
           await page.keyboard.press("Escape");
-          this.reviewNotes.push(`Manufacturer "${this.brand}" not in Yad2 list — pick it manually`);
+          this.reviewNotes.push(
+            `Manufacturer "${this.brand}" not in Yad2 list — pick it manually`,
+          );
         }
       } else {
-        this.reviewNotes.push("Manufacturer (יצרן) is required — pass --yad2-brand or pick manually");
+        this.reviewNotes.push(
+          "Manufacturer (יצרן) is required — pass --yad2-brand or pick manually",
+        );
       }
     }
 
@@ -231,15 +267,30 @@ export class Yad2Adapter extends BasePlatformAdapter {
           ok = await this.fillAutocomplete(page, "text-field-streetId", addr.street);
         }
         if (ok && addr.street && addr.houseNumber) {
-          ok = await this.fillAutocomplete(page, "text-field-homeNumber", addr.houseNumber);
+          ok = await this.fillAutocomplete(
+            page,
+            "text-field-homeNumber",
+            addr.houseNumber,
+          );
         }
         if (ok) {
-          await page.getByRole("button", { name: "עדכון" }).click().catch(() => {});
+          await page
+            .getByRole("button", { name: "עדכון" })
+            .click()
+            .catch(() => {});
           await page.waitForTimeout(800);
         }
         // Modal still open => Yad2 rejected something (e.g. missing house number)
-        if (await page.getByTestId("modal-close-button").isVisible().catch(() => false)) {
-          await page.getByTestId("modal-close-button").click().catch(() => {});
+        if (
+          await page
+            .getByTestId("modal-close-button")
+            .isVisible()
+            .catch(() => false)
+        ) {
+          await page
+            .getByTestId("modal-close-button")
+            .click()
+            .catch(() => {});
           this.reviewNotes.push(
             "Address not accepted — set seller.city/street/houseNumber in shark.config.json or fix manually",
           );
@@ -257,7 +308,8 @@ export class Yad2Adapter extends BasePlatformAdapter {
         .evaluate((el) => {
           const input = el as HTMLInputElement;
           const label =
-            input.closest("label") ?? document.querySelector(`label[for="${input.id}"]`);
+            input.closest("label") ??
+            document.querySelector(`label[for="${input.id}"]`);
           (label ?? input).click();
         })
         .catch(() => {});
@@ -386,7 +438,8 @@ export class Yad2Adapter extends BasePlatformAdapter {
       return {
         status: "unknown_submission_state",
         destination,
-        message: "Clicked סיום והעלאה but still on the form — check for validation errors",
+        message:
+          "Clicked סיום והעלאה but still on the form — check for validation errors",
       };
     }
 

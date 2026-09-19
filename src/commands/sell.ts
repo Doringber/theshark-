@@ -455,7 +455,11 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       if (options.yad2Brand) adapter.brand = options.yad2Brand;
       adapter.address = config.seller;
     }
-    if (adapter instanceof WhatsAppWebAdapter && options.waTo && options.waTo.length > 0) {
+    if (
+      adapter instanceof WhatsAppWebAdapter &&
+      options.waTo &&
+      options.waTo.length > 0
+    ) {
       adapter.targetChats = options.waTo;
     }
 
@@ -557,6 +561,11 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
           message: draftResult.error,
         });
         await store.updateDestinationStatus(run.id, platform, platform, "failed");
+        // Human-in-the-loop blocker (captcha/login): keep the tab so the user can act.
+        if (session.isAttached() && /captcha/i.test(draftResult.error ?? "")) {
+          await session.detach();
+          session = null;
+        }
         continue;
       }
 
@@ -569,8 +578,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
 
       // Per-destination approval (groups expand the destination binding)
       const baseDestination = preview.destinations[0] ?? platform;
-      const requestedGroups =
-        platform === "facebook" ? (options.groups ?? []) : [];
+      const requestedGroups = platform === "facebook" ? (options.groups ?? []) : [];
       const destination = requestedGroups.length
         ? ["marketplace", ...requestedGroups].join(",")
         : baseDestination;
@@ -607,7 +615,9 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
 
       // Draft-only: leave the filled form open for manual review, no submit.
       if (options.draftOnly) {
-        console.log(`  📝 Draft ready on ${destination} — tab left open for your review`);
+        console.log(
+          `  📝 Draft ready on ${destination} — tab left open for your review`,
+        );
         console.log("     Check the form, then publish manually or close the tab.\n");
         results.push({
           status: "skipped",
