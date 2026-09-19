@@ -445,7 +445,10 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
     try {
       console.log(`  🌐 Launching browser for ${platform}...`);
       session = new BrowserSession({
-        profilePath: resolve(config.browserProfilePath, platform),
+        profilePath: resolve(
+          config.browserProfilePath.replace("~", process.env["HOME"] ?? "~"),
+          platform,
+        ),
         headed: true,
       });
       const page = await session.getPage();

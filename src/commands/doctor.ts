@@ -77,7 +77,10 @@ export async function runDoctor(): Promise<void> {
 
   // Browser profile
   const profilePath = resolve(
-    process.env["SHARK_BROWSER_PROFILE"] ?? "~/.shark/browser-profile",
+    (process.env["SHARK_BROWSER_PROFILE"] ?? "~/.shark/browser-profile").replace(
+      "~",
+      process.env["HOME"] ?? "~",
+    ),
   );
   checks.push({
     name: "Browser profile",

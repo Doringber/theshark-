@@ -26,44 +26,28 @@ export async function captureSnapshot(page: Page): Promise<PageSnapshot> {
   const title = await page.title();
 
   // Build a simplified accessible tree from the page
-  const tree = await page.evaluate(() => {
-    function walk(el: Element): {
-      role: string;
-      name: string;
-      children?: { role: string; name: string; children?: unknown[] }[];
-    } | null {
-      const role = el.getAttribute("role") || el.tagName.toLowerCase();
-      const name =
-        el.getAttribute("aria-label") || el.getAttribute("data-testid") || "";
-
-      // Skip script, style, and hidden elements
-      if (["script", "style", "noscript"].includes(el.tagName.toLowerCase())) {
-        return null;
+  const tree = await page.evaluate(`
+    (() => {
+      function walk(el) {
+        var role = el.getAttribute("role") || el.tagName.toLowerCase();
+        var name = el.getAttribute("aria-label") || el.getAttribute("data-testid") || "";
+        if (["script", "style", "noscript"].includes(el.tagName.toLowerCase())) {
+          return null;
+        }
+        var children = [];
+        for (var i = 0; i < el.children.length; i++) {
+          var node = walk(el.children[i]);
+          if (node) children.push(node);
+        }
+        if (!name && children.length === 0) return null;
+        var result = { role: role, name: name };
+        if (children.length > 0) result.children = children;
+        return result;
       }
-
-      const children: {
-        role: string;
-        name: string;
-        children?: unknown[];
-      }[] = [];
-      for (const child of el.children) {
-        const node = walk(child);
-        if (node) children.push(node);
-      }
-
-      // Only include nodes with a role/label or meaningful children
-      if (!name && children.length === 0) return null;
-
-      return {
-        role,
-        name,
-        ...(children.length > 0 ? { children } : {}),
-      };
-    }
-
-    const root = walk(document.body);
-    return root ? [root] : [];
-  });
+      var root = walk(document.body);
+      return root ? [root] : [];
+    })()
+  `);
 
   return {
     url: redactUrl(rawUrl),

@@ -62,39 +62,53 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
         return { success: false, error: manifestCheck.reason };
       }
 
-      // Navigate: Marketplace → Create new listing → Item for sale
-      const marketplaceLink = page.getByLabel("Marketplace");
-      if (!(await marketplaceLink.isVisible().catch(() => false))) {
-        return {
-          success: false,
-          needsMapping: true,
-          error: "Marketplace link not found — needs_mapping",
-        };
-      }
-      await marketplaceLink.click();
-      await page.waitForLoadState("domcontentloaded");
+      // Navigate to the item form. On the real site go straight to the
+      // create-item URL (the header create button has no stable label);
+      // on fixture/test hosts keep the click-through flow.
+      if (page.url().includes("facebook.com")) {
+        await page.goto("https://www.facebook.com/marketplace/create/item", {
+          waitUntil: "domcontentloaded",
+          timeout: 30_000,
+        });
+        await page
+          .getByLabel("Title")
+          .waitFor({ timeout: 15_000 })
+          .catch(() => {});
+      } else {
+        // Navigate: Marketplace → Create new listing → Item for sale
+        const marketplaceLink = page.getByLabel("Marketplace");
+        if (!(await marketplaceLink.isVisible().catch(() => false))) {
+          return {
+            success: false,
+            needsMapping: true,
+            error: "Marketplace link not found — needs_mapping",
+          };
+        }
+        await marketplaceLink.click();
+        await page.waitForLoadState("domcontentloaded");
 
-      const createLink = page.getByLabel("Create new listing");
-      if (!(await createLink.isVisible().catch(() => false))) {
-        return {
-          success: false,
-          needsMapping: true,
-          error: "Create new listing link not found — needs_mapping",
-        };
-      }
-      await createLink.click();
-      await page.waitForLoadState("domcontentloaded");
+        const createLink = page.getByLabel("Create new listing");
+        if (!(await createLink.isVisible().catch(() => false))) {
+          return {
+            success: false,
+            needsMapping: true,
+            error: "Create new listing link not found — needs_mapping",
+          };
+        }
+        await createLink.click();
+        await page.waitForLoadState("domcontentloaded");
 
-      const itemForSale = page.getByLabel("Item for sale");
-      if (!(await itemForSale.isVisible().catch(() => false))) {
-        return {
-          success: false,
-          needsMapping: true,
-          error: "Item for sale option not found — needs_mapping",
-        };
+        const itemForSale = page.getByLabel("Item for sale");
+        if (!(await itemForSale.isVisible().catch(() => false))) {
+          return {
+            success: false,
+            needsMapping: true,
+            error: "Item for sale option not found — needs_mapping",
+          };
+        }
+        await itemForSale.click();
+        await page.waitForLoadState("domcontentloaded");
       }
-      await itemForSale.click();
-      await page.waitForLoadState("domcontentloaded");
 
       // Fill the item form
       const titleInput = page.getByLabel("Title");
@@ -108,11 +122,26 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
 
       await titleInput.fill(listing.title);
       await page.getByLabel("Price").fill(String(listing.price));
-      await page.getByLabel("Description").fill(listing.description);
 
       const locationField = page.getByLabel("Location");
       if (await locationField.isVisible().catch(() => false)) {
-        await locationField.fill(listing.location);
+        // Real FB Location is an autocomplete combobox pre-filled with the
+        // account default — only overwrite when it's empty, since typing
+        // without picking a suggestion invalidates the field.
+        const current = await locationField.inputValue().catch(() => "");
+        if (!current.trim()) {
+          await locationField.fill(listing.location);
+          await page.waitForTimeout(2000);
+          // Accept the top autocomplete match, if any appeared.
+          const suggestion = page
+            .locator('[role="option"], [role="menuitem"]')
+            .first();
+          if (await suggestion.isVisible().catch(() => false)) {
+            await suggestion.click().catch(() => {});
+          } else {
+            await page.keyboard.press("Enter").catch(() => {});
+          }
+        }
       }
 
       // Category — fixture uses a native select, real FB uses a dialog picker.
@@ -174,17 +203,60 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
         // pickers vary by account and are user-confirmed at preview time.
       }
 
-      // Upload photos — fixture labels its file input, real FB hides bare
-      // input[type="file"] elements behind the "Add photos" dropzone
-      const photoInput = page.getByLabel("Add photos");
-      if (await photoInput.isVisible().catch(() => false)) {
-        const filePaths = uploadable.map((img) => img.path);
-        await photoInput.setInputFiles(filePaths);
+      // Description renders only after Category is chosen and sits below
+      // the fold — scroll it in. Note: on some category forms the <label>
+      // loses its "for" association, so fall back to a container-scoped fill.
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(2000);
+      const descInput = page.getByLabel("Description");
+      await descInput.waitFor({ timeout: 10_000 }).catch(() => {});
+      if (await descInput.isVisible().catch(() => false)) {
+        await descInput.fill(listing.description);
       } else {
-        const fileInput = page.locator('input[type="file"]').first();
-        if ((await fileInput.count().catch(() => 0)) > 0) {
-          const filePaths = uploadable.map((img) => img.path);
-          await fileInput.setInputFiles(filePaths);
+        const filled = await page
+          .evaluate(
+            (text) => {
+              const labels = Array.from(document.querySelectorAll("label"));
+              const lab = labels.find(
+                (l) => (l.innerText || "").trim() === "Description",
+              );
+              const ta =
+                lab?.parentElement?.querySelector("textarea") ?? null;
+              if (!ta) return false;
+              const setter = Object.getOwnPropertyDescriptor(
+                window.HTMLTextAreaElement.prototype,
+                "value",
+              )?.set;
+              if (setter) setter.call(ta, text);
+              else ta.value = text;
+              ta.dispatchEvent(new Event("input", { bubbles: true }));
+              ta.dispatchEvent(new Event("change", { bubbles: true }));
+              return true;
+            },
+            listing.description,
+          )
+          .catch(() => false);
+        if (!filled) {
+          return {
+            success: false,
+            needsMapping: true,
+            error: "Description field not found — needs_mapping",
+          };
+        }
+      }
+
+      // Upload photos — real FB hides bare input[type="file"] elements
+      // behind the "Add photos" dropzone div (which also matches the
+      // accessible label but is not an input); fixture labels its file
+      // input directly. Prefer a real file input either way.
+      const filePaths = uploadable.map((img) => img.path);
+      const fileInput = page.locator('input[type="file"]').first();
+      if ((await fileInput.count().catch(() => 0)) > 0) {
+        await fileInput.setInputFiles(filePaths);
+      } else {
+        const photoInput = page.getByLabel("Add photos");
+        if (await photoInput.isVisible().catch(() => false)) {
+          await photoInput.setInputFiles(filePaths);
         }
       }
 
@@ -225,14 +297,104 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       platform: "facebook",
       title,
       description,
-      price,
+      price: price.replace(/^₪/, ""),
       images: [],
-      destinations,
+      // Real FB only shows destination checkboxes after Next — until then
+      // the listing targets Marketplace by default (matches submit()).
+      destinations: destinations.length > 0 ? destinations : ["marketplace"],
     };
   }
 
   async submit(page: Page, approval: ApprovalToken): Promise<SubmissionResult> {
-    // Read selected destinations from checkboxes
+    // Advance through Next screens (form → meetup/boost → publish).
+    // A disabled Next means a required field is unconfirmed — report it
+    // honestly instead of timing out on the click.
+    for (let step = 0; step < 3; step++) {
+      const publishVisible = await page
+        .getByRole("button", { name: "Publish", exact: true })
+        .isVisible()
+        .catch(() => false);
+      if (publishVisible) break;
+
+      const nextBtn = page.getByRole("button", { name: "Next", exact: true });
+      if (!(await nextBtn.isVisible().catch(() => false))) break;
+
+      const disabled = await nextBtn.getAttribute("aria-disabled").catch(() => null);
+      if (disabled === "true") {
+        await page.screenshot({ path: ".shark/snapshots/fb-next-disabled.png" }).catch(() => {});
+        return {
+          status: "needs_mapping",
+          destination: "marketplace",
+          message:
+            "Next is disabled — a required field needs attention (see .shark/snapshots/fb-next-disabled.png)",
+        };
+      }
+
+      // Keep publishing free — turn off the paid Boost step when present.
+      // Match only the VISIBLE switch (earlier steps keep hidden copies in
+      // the DOM) and verify the state actually flipped.
+      const boostOff = await page
+        .evaluate(() => {
+          const visible = (e: Element): boolean => {
+            const r = e.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          };
+          const switches = Array.from(
+            document.querySelectorAll('input[role="switch"], [role="switch"]'),
+          ).filter(visible);
+          const target = switches.find((e) => {
+            const scope =
+              e.closest("div")?.parentElement?.innerText ??
+              e.getAttribute("aria-label") ??
+              "";
+            return scope.includes("Boost");
+          });
+          if (!target) return `absent:${switches.length}`;
+          const isOn =
+            target.getAttribute("aria-checked") === "true" ||
+            (target instanceof HTMLInputElement && target.checked);
+          if (isOn) (target as HTMLElement).click();
+          return isOn ? "was_on" : "was_off";
+        })
+        .catch(() => "error");
+      if (boostOff === "was_on") {
+        // Re-read: a controlled switch sometimes needs a beat to flip.
+        await page.waitForTimeout(1500);
+        const stillOn = await page
+          .evaluate(() => {
+            const el = Array.from(
+              document.querySelectorAll('input[role="switch"], [role="switch"]'),
+            ).find((e) => {
+              const r = e.getBoundingClientRect();
+              if (r.width === 0 || r.height === 0) return false;
+              const scope =
+                e.closest("div")?.parentElement?.innerText ??
+                e.getAttribute("aria-label") ??
+                "";
+              return scope.includes("Boost");
+            });
+            if (!el) return false;
+            return (
+              el.getAttribute("aria-checked") === "true" ||
+              (el instanceof HTMLInputElement && el.checked)
+            );
+          })
+          .catch(() => false);
+        if (stillOn) {
+          return {
+            status: "needs_mapping",
+            destination: "marketplace",
+            message:
+              "Could not turn off paid Boost step — refusing to publish into an ad flow",
+          };
+        }
+      }
+
+      await nextBtn.click();
+      await page.waitForTimeout(3000);
+    }
+
+    // Read selected destinations from checkboxes (present on later steps)
     const destinations: string[] = [];
     const checkboxes = page.locator('input[name="dest"]:checked');
     const checkCount = await checkboxes.count();
@@ -258,17 +420,8 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
       };
     }
 
-    // Click Publish (real FB shows Next first — advance past it)
-    let publishBtn = page.getByRole("button", { name: "Publish" });
-    if (!(await publishBtn.isVisible().catch(() => false))) {
-      const nextBtn = page.getByRole("button", { name: "Next" });
-      if (await nextBtn.isVisible().catch(() => false)) {
-        await nextBtn.click();
-        await page.waitForLoadState("domcontentloaded").catch(() => {});
-        await page.waitForTimeout(2000);
-        publishBtn = page.getByRole("button", { name: "Publish" });
-      }
-    }
+    // Click Publish (reached after advancing past the Next screens).
+    const publishBtn = page.getByRole("button", { name: "Publish", exact: true });
     if (!(await publishBtn.isVisible().catch(() => false))) {
       return {
         status: "needs_mapping",
@@ -279,16 +432,59 @@ export class FacebookMarketplaceAdapter extends BasePlatformAdapter {
 
     await publishBtn.click();
 
-    // Check result
-    const status = await page.locator("#publish-status").textContent();
-    if (status === "published") {
+    // Check result — fixture signals via #publish-status, real FB navigates
+    // to the new listing (or shows a confirmation).
+    const fixtureStatus = await page
+      .locator("#publish-status")
+      .textContent({ timeout: 5_000 })
+      .catch(() => null);
+    if (fixtureStatus === "published") {
       return { status: "published", destination };
     }
 
+    await page.waitForTimeout(10_000);
+    await page
+      .waitForURL(/marketplace\/(item|you)/i, { timeout: 15_000 })
+      .catch(() => {});
+    const finalUrl = page.url();
+    if (/facebook\.com\/marketplace\/(item|you)/i.test(finalUrl)) {
+      return { status: "published", destination, message: finalUrl };
+    }
+
+    // Still on the form — surface whatever Facebook is actually saying
+    // (error toast, dialog, missing-field hint) instead of a generic error.
+    const chatter = await page
+      .evaluate(() => {
+        const dialog = Array.from(
+          document.querySelectorAll('[role="dialog"], [role="alert"]'),
+        )
+          .map((d) => (d as HTMLElement).innerText?.slice(0, 300))
+          .filter(Boolean)
+          .join(" /// ");
+        return {
+          dialog: dialog.slice(0, 500),
+          title: document.title,
+        };
+      })
+      .catch(() => ({ dialog: "", title: "" }));
+
+    const bodyText = await page
+      .evaluate(() => document.body.innerText.slice(0, 2000))
+      .catch(() => "");
+    if (
+      /listing is (live|active)|your listing has been published/i.test(bodyText) ||
+      /listing is (live|active)|your listing has been published/i.test(chatter.dialog)
+    ) {
+      return { status: "published", destination };
+    }
+
+    await page.screenshot({ path: ".shark/snapshots/fb-after-publish.png" }).catch(() => {});
+    const hint = chatter.dialog ? ` Facebook says: "${chatter.dialog}"` : "";
     return {
       status: "unknown_submission_state",
       destination,
-      message: "Publish may have been triggered but result is uncertain",
+      message:
+        `Publish clicked but result is uncertain.${hint} Screenshot at .shark/snapshots/fb-after-publish.png, check your Marketplace listings`,
     };
   }
 }
