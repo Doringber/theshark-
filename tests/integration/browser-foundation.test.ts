@@ -86,9 +86,9 @@ test.describe("Sanitized inspect snapshot", () => {
   });
 
   test("snapshot URL does not contain query parameters", async ({ page }) => {
-    await page.goto(`${BASE}/facebook/index.html?state=logged_in&token=secret123`);
+    await page.goto(`${BASE}/facebook/index.html?state=logged_in&token=fake_test_val`);
     const snapshot = await captureSnapshot(page);
-    expect(snapshot.url).not.toContain("token=secret123");
+    expect(snapshot.url).not.toContain("token=fake_test_val");
     expect(snapshot.url).not.toContain("state=logged_in");
   });
 

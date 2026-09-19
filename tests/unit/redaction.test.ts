@@ -4,9 +4,10 @@ import { redact, redactUrl } from "../../src/services/redaction.js";
 describe("Redaction", () => {
   describe("redact", () => {
     it("redacts bearer tokens", () => {
-      const input = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig";
+      const input =
+        "Authorization: Bearer eyJFQUtFIjoiVEVTVCJ9.fakepayload.fakesig";
       const result = redact(input);
-      expect(result).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+      expect(result).not.toContain("eyJFQUtFIjoiVEVTVCJ9");
       expect(result).toContain("[REDACTED");
     });
 
@@ -17,15 +18,15 @@ describe("Redaction", () => {
     });
 
     it("redacts API keys", () => {
-      const input = "OPENAI_API_KEY=sk-proj-abc123def456ghi789";
+      const input = "OPENAI_API_KEY=sk-fake-test-key-not-real-000";
       const result = redact(input);
-      expect(result).not.toContain("sk-proj-abc123def456ghi789");
+      expect(result).not.toContain("sk-fake-test-key-not-real-000");
     });
 
     it("redacts passwords", () => {
-      const input = 'password: "MySuperSecret123!"';
+      const input = 'password: "FAKE_TEST_PASS_000"';
       const result = redact(input);
-      expect(result).not.toContain("MySuperSecret123!");
+      expect(result).not.toContain("FAKE_TEST_PASS_000");
     });
 
     it("redacts email addresses", () => {
@@ -60,9 +61,10 @@ describe("Redaction", () => {
     });
 
     it("redacts browser storage values", () => {
-      const input = 'localStorage.setItem("token", "secret-value-here")';
+      const input =
+        'localStorage.setItem("token", "fake-test-val-000")';
       const result = redact(input);
-      expect(result).not.toContain("secret-value-here");
+      expect(result).not.toContain("fake-test-val-000");
     });
 
     it("redacts private chat content patterns", () => {
@@ -141,15 +143,15 @@ describe("Redaction", () => {
 
   describe("Request header redaction", () => {
     it("redacts authorization headers", () => {
-      const input = "Authorization: Basic dXNlcjpwYXNz";
+      const input = "Authorization: Basic ZmFrZTpmYWtl";
       const result = redact(input);
-      expect(result).not.toContain("dXNlcjpwYXNz");
+      expect(result).not.toContain("ZmFrZTpmYWtl");
     });
 
     it("redacts x-api-key headers", () => {
-      const input = "X-API-Key: my-secret-api-key-12345";
+      const input = "X-API-Key: fake-test-api-key-000";
       const result = redact(input);
-      expect(result).not.toContain("my-secret-api-key-12345");
+      expect(result).not.toContain("fake-test-api-key-000");
     });
   });
 });
