@@ -96,7 +96,7 @@ program
   .option("--auto-close", "Auto-close when login detected")
   .option(
     "--cdp <url>",
-    'CDP URL to attach to (default: shared Shark Chrome on localhost:9222; "none" = own profile)',
+    'CDP URL to attach to (default: shared Shark Chrome on 127.0.0.1:9333; "none" = own profile)',
   )
   .action(
     async (opts: {
@@ -129,7 +129,7 @@ program
   .option("--wait <ms>", "Wait time before capturing (ms)", "3000")
   .option(
     "--cdp <url>",
-    'CDP URL to attach to (default: shared Shark Chrome on localhost:9222; "none" = own profile)',
+    'CDP URL to attach to (default: shared Shark Chrome on 127.0.0.1:9333; "none" = own profile)',
   )
   .action(
     async (opts: {
@@ -182,7 +182,7 @@ program
   )
   .option(
     "--cdp <url>",
-    'CDP URL to attach to (default: shared Shark Chrome on localhost:9222; "none" = own profile)',
+    'CDP URL to attach to (default: shared Shark Chrome on 127.0.0.1:9333; "none" = own profile)',
   )
   .option(
     "--platforms <platforms>",
@@ -192,10 +192,15 @@ program
     "--analysis-only <indices>",
     "Comma-separated image indices (0-based) to mark as analysis_only",
   )
+  .option(
+    "--non-interactive",
+    "Skip the fact interview (all facts from flags). Final Publish/Send approvals still prompt.",
+  )
   .action(
     async (
       sources: string[],
       opts: {
+        nonInteractive?: boolean;
         image?: string[];
         publish?: boolean;
         dryRun?: boolean;
@@ -244,6 +249,7 @@ program
           analysisOnlyIndices: opts.analysisOnly
             ?.split(",")
             .map((s) => parseInt(s.trim(), 10)),
+          nonInteractive: opts.nonInteractive ?? false,
         });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

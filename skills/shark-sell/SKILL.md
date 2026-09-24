@@ -7,7 +7,7 @@ description: Use when the user wants to sell / post / publish a second-hand item
 
 Shark is a local CLI (`npm run dev -- <command>` from the repo root) that fills real
 listing forms in **one shared Chrome window** (`~/.shark/chrome`, CDP on
-`localhost:9222`). The user logs in to each site there once; every command reuses it.
+`127.0.0.1:9333`). The user logs in to each site there once; every command reuses it.
 Chrome forbids attaching to a user's main profile, so this window is the only one Shark
 ever drives. Never launch other browsers.
 
@@ -37,8 +37,10 @@ ever drives. Never launch other browsers.
    npm run dev -- sell ~/Desktop/item-photos --platforms facebook,yad2,whatsapp
    npm run dev -- sell --image a.jpg --image b.jpg \
      --title "..." --price 300 --condition good --location "תל אביב" \
-     --description "..." --platforms facebook,whatsapp,yad2
+     --description "..." --platforms facebook,whatsapp,yad2 --non-interactive
    ```
+   `--non-interactive` skips the fact interview (every fact must be a flag — Shark refuses to
+   guess). It never answers a Publish/Send prompt; those stay with the user in the terminal.
 3. **Show the user the plan** (one line per destination) and get an explicit yes.
 4. **Publish** with the same flags plus `--publish` (and `--no-dry-run` when config
    forces dry-run). Approve each destination at its final prompt. Platform specifics:

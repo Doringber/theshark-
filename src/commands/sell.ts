@@ -50,6 +50,39 @@ export interface SellOptions {
   waTo?: string[];
   defects?: string;
   pickupDelivery?: string;
+  /**
+   * `--non-interactive`: skip the fact interview — every listing fact must come
+   * from flags. Final Publish/Send approvals are NOT affected and still prompt;
+   * without a TTY they fail closed (nothing is submitted).
+   */
+  nonInteractive?: boolean;
+}
+
+const NON_INTERACTIVE_REQUIRED_FLAGS = [
+  "title",
+  "price",
+  "condition",
+  "location",
+  "platforms",
+] as const;
+
+/** `--non-interactive` may not fill gaps with guesses — every fact has to be on the command line. */
+export function assertFlagsCompleteForNonInteractive(options: SellOptions): void {
+  const missing = NON_INTERACTIVE_REQUIRED_FLAGS.filter((key) => {
+    const value = options[key];
+    return (
+      value === undefined ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  });
+  if (missing.length > 0) {
+    throw new Error(
+      `--non-interactive requires these flags so Shark never invents facts: ${missing
+        .map((m) => `--${m}`)
+        .join(", ")}`,
+    );
+  }
 }
 
 export interface SellResult {
@@ -339,13 +372,48 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
   }
 
   const config = await resolveConfig();
-  const interviewed = await interviewListing(imageResult.images, config, options);
-  if (interviewed.cancelled) {
-    console.log("🚫 Listing cancelled by user");
-    return { runId: "", listingId: "", results: [], dryRun: true };
+  const nonInteractive = options.nonInteractive === true;
+  if (nonInteractive) assertFlagsCompleteForNonInteractive(options);
+
+  let facts: ListingFacts;
+  let analysisOnlyIndices: number[];
+  if (nonInteractive) {
+    facts = factsFromFlags(
+      proposeListing({
+        images: imageResult.images,
+        config,
+        provided: factsFromFlags(
+          {
+            title: options.title,
+            description: options.description,
+            condition: options.condition,
+            price: options.price,
+            location: options.location,
+            category: options.category,
+            defects: options.defects,
+            pickupDelivery: options.pickupDelivery,
+          },
+          config,
+        ),
+      }),
+      config,
+    );
+    analysisOnlyIndices = imageResult.images
+      .filter((img) => img.uploadState !== "approved_for_upload")
+      .map((img) => img.order);
+    console.log(
+      "🤖 --non-interactive: facts taken from flags; final approvals still prompt\n",
+    );
+    showPreview(facts, imageResult.images, facts);
+  } else {
+    const interviewed = await interviewListing(imageResult.images, config, options);
+    if (interviewed.cancelled) {
+      console.log("🚫 Listing cancelled by user");
+      return { runId: "", listingId: "", results: [], dryRun: true };
+    }
+    facts = interviewed.facts;
+    analysisOnlyIndices = interviewed.analysisOnlyIndices;
   }
-  const facts = interviewed.facts;
-  const analysisOnlyIndices = interviewed.analysisOnlyIndices;
 
   let platforms: PlatformName[];
   if (options.platforms && options.platforms.length > 0) {
@@ -364,7 +432,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
   const yad2Brand = options.yad2Brand;
   let groups = options.groups;
 
-  if (platforms.includes("whatsapp") && !waTo?.length) {
+  if (!nonInteractive && platforms.includes("whatsapp") && !waTo?.length) {
     const raw = await input({
       message: "WhatsApp chats/groups (exact names, comma-separated):",
       default: "",
@@ -374,7 +442,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       .map((s) => s.trim())
       .filter(Boolean);
   }
-  if (platforms.includes("yad2") && !yad2Type) {
+  if (!nonInteractive && platforms.includes("yad2") && !yad2Type) {
     yad2Type = (
       await input({
         message: "Yad2 product type (optional, e.g. מחשב נייד):",
@@ -382,7 +450,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       })
     ).trim();
   }
-  if (platforms.includes("facebook") && !groups?.length) {
+  if (!nonInteractive && platforms.includes("facebook") && !groups?.length) {
     const raw = await input({
       message: "Facebook groups (optional, exact names, comma-separated):",
       default: "",
@@ -473,8 +541,12 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
       },
       notify: createHumanNotifier(),
       prompts: {
+        // Final approvals are ALWAYS interactive — --non-interactive never touches confirm.
         confirm: (message, defaultValue) => confirm({ message, default: defaultValue }),
-        input: (message) => input({ message }),
+        // Free-text waits (e.g. "sign in, then press Enter") cannot be answered without a
+        // human; in non-interactive mode they return immediately so the run fails closed
+        // (awaiting_login) instead of hanging.
+        input: (message) => (nonInteractive ? Promise.resolve("") : input({ message })),
         select: (message, choices) => select({ message, choices }),
         checkbox: (message, choices) => checkbox({ message, choices }),
       },

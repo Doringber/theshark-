@@ -2,19 +2,24 @@ import { test, expect } from "@playwright/test";
 import { FacebookMarketplaceAdapter } from "../../src/platforms/facebook-marketplace.js";
 import { createApproval } from "../../src/services/approvals.js";
 import type { ApprovedListing, ProductImage } from "../../src/domain/schemas.js";
+import { resolve } from "node:path";
+
+// Committed fixtures — never depend on files outside the repo (e.g. /tmp).
+const FIXTURE_PHOTO_1 = resolve("tests/fixtures/images/test-photo-1.jpg");
+const FIXTURE_PHOTO_2 = resolve("tests/fixtures/images/test-photo-2.jpg");
 
 const BASE = "http://127.0.0.1:4173";
 
 function makeListing(overrides: Partial<ApprovedListing> = {}): ApprovedListing {
   const images: ProductImage[] = [
     {
-      path: "/tmp/test-photo-1.jpg",
+      path: FIXTURE_PHOTO_1,
       mediaType: "image/jpeg",
       order: 0,
       uploadState: "approved_for_upload",
     },
     {
-      path: "/tmp/test-photo-2.jpg",
+      path: FIXTURE_PHOTO_2,
       mediaType: "image/jpeg",
       order: 1,
       uploadState: "approved_for_upload",
@@ -117,12 +122,13 @@ test.describe("Facebook Marketplace adapter", () => {
       const listing = makeListing({
         images: [
           {
-            path: "/tmp/safe.jpg",
+            path: FIXTURE_PHOTO_1,
             mediaType: "image/jpeg",
             order: 0,
             uploadState: "approved_for_upload",
           },
           {
+            // Never uploaded, so it does not need to exist on disk.
             path: "/tmp/sensitive.jpg",
             mediaType: "image/jpeg",
             order: 1,

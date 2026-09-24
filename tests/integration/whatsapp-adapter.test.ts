@@ -2,13 +2,17 @@ import { test, expect } from "@playwright/test";
 import { WhatsAppWebAdapter } from "../../src/platforms/whatsapp-web.js";
 import { createApproval } from "../../src/services/approvals.js";
 import type { ApprovedListing, ProductImage } from "../../src/domain/schemas.js";
+import { resolve } from "node:path";
+
+// Committed fixtures — never depend on files outside the repo (e.g. /tmp).
+const FIXTURE_PHOTO_1 = resolve("tests/fixtures/images/test-photo-1.jpg");
 
 const BASE = "http://127.0.0.1:4173";
 
 function makeListing(): ApprovedListing {
   const images: ProductImage[] = [
     {
-      path: "/tmp/test-photo-1.jpg",
+      path: FIXTURE_PHOTO_1,
       mediaType: "image/jpeg",
       order: 0,
       uploadState: "approved_for_upload",

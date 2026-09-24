@@ -24,7 +24,7 @@
     "second-hand",
     "listing"
   ],
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "engines": {
     "node": ">=20.0.0"

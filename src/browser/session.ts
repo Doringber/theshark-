@@ -5,8 +5,29 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 
-/** Default CDP endpoint for the shared Shark Chrome window */
-export const SHARK_CDP_URL = "http://localhost:9222";
+/**
+ * Default CDP endpoint for the shared Shark Chrome window.
+ *
+ * Deliberately NOT 9222: that is Chrome's own default remote-debugging port,
+ * so a user's everyday Chrome (chrome://inspect → "allow remote debugging")
+ * may already own it. Explicit IPv4 loopback avoids `localhost` resolving to
+ * one Chrome over IPv4 and another over IPv6.
+ */
+export const SHARK_CDP_PORT = 9333;
+export const SHARK_CDP_URL = `http://127.0.0.1:${SHARK_CDP_PORT}`;
+
+/** Turn a CDP attach error into an actionable message (no protocol noise). */
+export function describeAttachFailure(cdpUrl: string, error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (/context management is not supported/i.test(raw)) {
+    return (
+      `Cannot attach to Chrome at "${cdpUrl}": another Chrome (your everyday profile) ` +
+      "is answering on that port and refuses automation. Close it or change its " +
+      "remote-debugging port, then run `shark browser` to start the shared Shark Chrome."
+    );
+  }
+  return `Cannot attach to Chrome at "${cdpUrl}" (${raw}). Run \`shark browser\` to start the shared Shark Chrome.`;
+}
 /** Where the shared Shark Chrome keeps its logins (all platforms in one) */
 export const SHARK_CHROME_DIR = join(homedir(), ".shark", "chrome");
 export const CHROME_BIN =
@@ -35,7 +56,7 @@ export async function ensureSharkChrome(
   if (!existsSync(CHROME_BIN)) return null;
 
   await mkdir(SHARK_CHROME_DIR, { recursive: true });
-  const port = new URL(url).port || "9222";
+  const port = new URL(url).port || String(SHARK_CDP_PORT);
   const child = spawn(
     CHROME_BIN,
     [
@@ -64,7 +85,7 @@ export interface BrowserSessionOptions {
   headed?: boolean;
   /**
    * Attach to an already-running Chrome via CDP instead of launching a
-   * profile browser (e.g. "http://127.0.0.1:9222"). Shark opens a NEW TAB
+   * profile browser (e.g. "http://127.0.0.1:9333"). Shark opens a NEW TAB
    * for its work and only closes tabs it created — your tabs stay intact.
    */
   cdpUrl?: string;
@@ -109,12 +130,7 @@ export class BrowserSession {
       try {
         this.cdpBrowser = await chromium.connectOverCDP(cdpUrl);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Cannot attach to Chrome at "${cdpUrl}" (${msg}). ` +
-            "Relaunch Chrome with --remote-debugging-port first.",
-          { cause: error },
-        );
+        throw new Error(describeAttachFailure(cdpUrl, error), { cause: error });
       }
       this.attached = true;
       const contexts = this.cdpBrowser.contexts();
