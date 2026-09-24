@@ -56,6 +56,14 @@ ever drives. Never launch other browsers.
    `unknown_submission_state` mean exactly that — do not upgrade an uncertain state
    to success. Use `shark status <run-id>` and `shark resume <run-id>` after a pause.
 
+## Optional LLM copy
+
+If the user has `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` or `CODEX_API_KEY`
+exported, add `--llm openai|anthropic|gemini|codex` to write the description from the facts
+they gave. The model never sees images and a fact guard rejects invented numbers; if it
+fails, Shark keeps the user's text and prints why. Never ask the user to paste a key into
+chat, a file, or a flag.
+
 ## Setup / recovery commands
 
 ```bash

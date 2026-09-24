@@ -9,6 +9,7 @@
 - Never bypass login, QR authentication, CAPTCHA, 2FA, security checkpoints, rate limits, or platform restrictions.
 - Never log or persist passwords, cookies, tokens, browser storage, private message history, request headers, or image bytes.
 - Never reproduce a serial number, IMEI, ID number, account name, or other sensitive identifier found in an image in generated copy, logs, snapshots, or provider prompts.
+- LLM providers receive only user-typed facts (never image bytes or paths); generated copy must pass the fact guard or be discarded. API keys come from environment variables only and are never stored, logged, or echoed.
 - Never upload an image marked `analysis_only` or `replace_required`. Upload only the exact ordered image set the user has approved; do not silently enhance, crop, replace, or add images.
 
 ## Browser automation

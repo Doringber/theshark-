@@ -292,6 +292,34 @@ npm run dev -- sell --image front.jpg --image back.jpg --image sticker.jpg --ana
 Image `[2]` is marked `analysis_only`: it is never uploaded anywhere, and any identifier on it is
 never reproduced in copy, logs or snapshots.
 
+### Let an LLM write the description (from your facts only)
+
+```bash
+export OPENAI_API_KEY=…        # or ANTHROPIC_API_KEY / GEMINI_API_KEY / CODEX_API_KEY
+npm run dev -- sell photos/ --title "מקבוק אייר 2015 13 אינץ'" --price 300 --condition good \
+  --location "מודיעין" --defects "שריטה קלה במכסה" --platforms yad2 \
+  --llm openai --llm-model gpt-4o-mini --non-interactive
+```
+
+```
+✍️  Description written by openai/gpt-4o-mini from your facts only
+  Description: למכירה מקבוק אייר 2015 13 אינץ' במצב טוב. שריטה קלה במכסה. 300 ש"ח, איסוף עצמי במודיעין.
+```
+
+| Provider                              | `--llm`     | Key (env only)                                                  | Default model             |
+| ------------------------------------- | ----------- | --------------------------------------------------------------- | ------------------------- |
+| OpenAI                                | `openai`    | `OPENAI_API_KEY`                                                | `gpt-4o-mini`             |
+| Codex / any OpenAI-compatible gateway | `codex`     | `CODEX_API_KEY` or `OPENAI_API_KEY` (+ `llm.baseUrl` in config) | `gpt-4o-mini`             |
+| Anthropic                             | `anthropic` | `ANTHROPIC_API_KEY`                                             | `claude-3-5-haiku-latest` |
+| Google                                | `gemini`    | `GEMINI_API_KEY` / `GOOGLE_API_KEY`                             | `gemini-2.0-flash`        |
+
+The model gets **only** the facts you typed (title, price, condition, defects, city, pickup, your
+notes) — never image bytes or paths — and is told not to add anything. A **fact guard** then
+rejects the output if it contains any number that wasn't in your facts (a different price, an
+invented year, "16GB"), or anything that looks like a serial number; in that case your own text is
+kept and the reason is printed. Keys are never written to config, logs or run records. Interactive
+mode: choose **Regenerate** to get a new draft.
+
 ### Interrupted? Resume
 
 ```bash
@@ -349,6 +377,7 @@ Configuration (`shark.config.json`, git-ignored):
   "dryRun": true,
   "currency": "NIS",
   "seller": { "city": "תל אביב יפו", "street": "דיזנגוף", "houseNumber": "1" },
+  "llm": { "provider": "openai", "model": "gpt-4o-mini" },
   "platforms": {
     "facebook": { "enabled": true, "url": "https://www.facebook.com" },
     "whatsapp": { "enabled": true, "url": "https://web.whatsapp.com" },

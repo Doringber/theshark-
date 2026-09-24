@@ -103,8 +103,20 @@ export const SellerAddressSchema = z.object({
 export type SellerAddress = z.infer<typeof SellerAddressSchema>;
 
 /** Full Shark configuration */
+/** Optional LLM copywriter. The API key is NEVER in config — env vars only. */
+export const LlmConfigSchema = z.object({
+  provider: z.enum(["openai", "anthropic", "gemini", "codex"]).optional(),
+  model: z.string().optional(),
+  baseUrl: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith("https://"), "LLM baseUrl must be HTTPS")
+    .optional(),
+});
+
 export const SharkConfigSchema = z.object({
   language: z.enum(["he", "en", "both"]).default("he"),
+  llm: LlmConfigSchema.default({}),
   dryRun: z.boolean().default(true),
   currency: z.literal("NIS").default("NIS"),
   browserProfilePath: z.string().default("~/.shark/browser-profile"),

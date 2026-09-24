@@ -1,6 +1,15 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { resolveSellImagePaths, runSell } from "./commands/sell.js";
+import { LLM_PROVIDERS, type LlmProviderName } from "./services/llm-copywriter.js";
+
+function parseLlmProvider(raw: string | undefined): LlmProviderName | undefined {
+  if (raw === undefined) return undefined;
+  const value = raw.trim().toLowerCase();
+  if (value === "none" || value === "") return undefined;
+  if ((LLM_PROVIDERS as string[]).includes(value)) return value as LlmProviderName;
+  throw new Error(`--llm must be one of ${LLM_PROVIDERS.join(", ")} (got "${raw}")`);
+}
 import { runWSend } from "./commands/wsend.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runAuth } from "./commands/auth.js";
@@ -193,6 +202,11 @@ program
     "Comma-separated image indices (0-based) to mark as analysis_only",
   )
   .option(
+    "--llm <provider>",
+    "Write the description from your facts with an LLM: openai | anthropic | gemini | codex (key from env, e.g. OPENAI_API_KEY)",
+  )
+  .option("--llm-model <model>", "Model name for --llm (provider default if omitted)")
+  .option(
     "--non-interactive",
     "Skip the fact interview (all facts from flags). Final Publish/Send approvals still prompt.",
   )
@@ -201,6 +215,8 @@ program
       sources: string[],
       opts: {
         nonInteractive?: boolean;
+        llm?: string;
+        llmModel?: string;
         image?: string[];
         publish?: boolean;
         dryRun?: boolean;
@@ -250,6 +266,8 @@ program
             ?.split(",")
             .map((s) => parseInt(s.trim(), 10)),
           nonInteractive: opts.nonInteractive ?? false,
+          llm: parseLlmProvider(opts.llm),
+          llmModel: opts.llmModel,
         });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

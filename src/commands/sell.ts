@@ -17,6 +17,7 @@ import {
 } from "../orchestration/sell-orchestrator.js";
 import { wrapSession } from "../orchestration/browser-port.js";
 import { resolveConfig } from "./config-io.js";
+import { writeListingCopy, type LlmProviderName } from "../services/llm-copywriter.js";
 import {
   type HighValueField,
   type ListingFacts,
@@ -56,6 +57,49 @@ export interface SellOptions {
    * without a TTY they fail closed (nothing is submitted).
    */
   nonInteractive?: boolean;
+  /** LLM copywriter: rewrite the description from YOUR facts (never adds facts). */
+  llm?: LlmProviderName;
+  llmModel?: string;
+}
+
+/**
+ * If an LLM provider is selected (flag or config), write the description from the
+ * user's facts. On any failure the user's own text is kept and the reason shown.
+ */
+async function applyLlmCopy(
+  facts: ListingFacts,
+  config: SharkConfig,
+  options: SellOptions,
+): Promise<ListingFacts> {
+  const provider = options.llm ?? config.llm.provider;
+  if (!provider) return facts;
+  if (!facts.title || facts.price === undefined) return facts;
+  const result = await writeListingCopy(
+    {
+      title: facts.title,
+      price: facts.price,
+      condition: facts.condition,
+      location: facts.location,
+      defects: facts.defects,
+      pickupDelivery: facts.pickupDelivery,
+      description: facts.description,
+      category: facts.category,
+      language: config.language,
+    },
+    {
+      provider,
+      model: options.llmModel ?? config.llm.model,
+      baseUrl: config.llm.baseUrl,
+    },
+  );
+  if (!result.ok) {
+    console.log(`⚠️  LLM copy skipped — ${result.reason}. Keeping your text.`);
+    return facts;
+  }
+  console.log(
+    `✍️  Description written by ${result.provider}/${result.model} from your facts only\n`,
+  );
+  return { ...facts, description: result.text };
 }
 
 const NON_INTERACTIVE_REQUIRED_FLAGS = [
@@ -285,6 +329,7 @@ async function interviewListing(
   );
   facts = factsFromFlags(proposeListing({ images, config, provided: facts }), config);
   facts = await askMissingFacts(facts, config);
+  facts = await applyLlmCopy(facts, config, options);
 
   while (true) {
     const proposal = proposeListing({ images, config, provided: facts });
@@ -310,8 +355,17 @@ async function interviewListing(
     }
     if (action === "cancel") return { cancelled: true };
     if (action === "regenerate") {
+      if (options.llm ?? config.llm.provider) {
+        facts = await applyLlmCopy(
+          await askMissingFacts(proposal, config),
+          config,
+          options,
+        );
+        continue;
+      }
       console.log(
-        "Shark cannot invent product facts from photos. Re-asking missing fields only.",
+        "Shark cannot invent product facts from photos. Re-asking missing fields only. " +
+          "(Tip: --llm openai|anthropic|gemini|codex writes the description from your facts.)",
       );
       facts = await askMissingFacts(proposal, config);
       continue;
@@ -404,6 +458,7 @@ export async function runSell(options: SellOptions): Promise<SellResult> {
     console.log(
       "🤖 --non-interactive: facts taken from flags; final approvals still prompt\n",
     );
+    facts = await applyLlmCopy(facts, config, options);
     showPreview(facts, imageResult.images, facts);
   } else {
     const interviewed = await interviewListing(imageResult.images, config, options);
