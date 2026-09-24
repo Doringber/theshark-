@@ -178,6 +178,8 @@ program
   .option("--condition <condition>", "Condition: new, like_new, good, fair, poor")
   .option("--location <location>", "City/area (skip interactive prompt)")
   .option("--category <category>", "Facebook category, e.g. Furniture")
+  .option("--defects <text>", "Known defects (or אין)")
+  .option("--pickup <text>", "Pickup / delivery terms, e.g. איסוף עצמי")
   .option("--groups <names>", "Comma-separated Facebook group names to cross-post to")
   .option(
     "--yad2-type <name>",
@@ -217,6 +219,8 @@ program
         nonInteractive?: boolean;
         llm?: string;
         llmModel?: string;
+        defects?: string;
+        pickup?: string;
         image?: string[];
         publish?: boolean;
         dryRun?: boolean;
@@ -249,6 +253,8 @@ program
             "new" | "like_new" | "good" | "fair" | "poor" | undefined,
           location: opts.location,
           category: opts.category,
+          defects: opts.defects,
+          pickupDelivery: opts.pickup,
           groups: opts.groups
             ?.split(",")
             .map((s) => s.trim())
