@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="96" viewBox="0 0 360 96" role="img" aria-label="Shark">
+  <!-- fin -->
+  <path d="M14 70 C 30 30, 58 18, 86 14 C 74 34, 74 52, 84 70 Z" fill="#38bdf8"/>
+  <path d="M84 70 L 112 70 C 100 62, 92 58, 86 46 Z" fill="#38bdf8" opacity="0.55"/>
+  <!-- water line -->
+  <path d="M6 76 q 12 -8 24 0 t 24 0 t 24 0 t 24 0 t 24 0" stroke="#38bdf8" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <text x="136" y="66" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="-1" fill="#e2e8f0">Shark</text>
+</svg>

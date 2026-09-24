@@ -1,150 +1,347 @@
 <div align="center">
 
-# 🦈 Shark
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/shark-logo-dark.svg">
+  <img src="docs/assets/shark-logo-light.svg" alt="Shark" width="300">
+</picture>
 
-**Sell once. Post everywhere.**
-One CLI that fills your second-hand listing on **Facebook Marketplace (+ groups)**, **WhatsApp chats** and **Yad2** — from one shared, logged-in Chrome window, with a human approving every final click.
+<h3>Sell once. Post everywhere — with a human on the final click.</h3>
 
 [![CI](https://github.com/Doringber/theshark-/actions/workflows/verify.yml/badge.svg)](https://github.com/Doringber/theshark-/actions/workflows/verify.yml)
 [![Node 20+](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Playwright](https://img.shields.io/badge/Playwright-CDP-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757)](#claude-code-plugin)
+[![Playwright over CDP](https://img.shields.io/badge/Playwright-CDP-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev)
+[![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757)](#-claude-code-plugin)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-<img src="docs/media/shark-cli.gif" alt="Shark CLI: doctor, then a dry-run sell that prepares drafts on Facebook and Yad2" width="900">
+English | [עברית](#-בעברית-בקצרה)
 
-<sub>Real session, real sites, nothing published: <code>doctor</code> → <code>sell … --non-interactive</code> → <code>draft_ready</code> on Facebook and Yad2.</sub>
+<div align="left">
+
+Shark is a local CLI that takes one second-hand listing — photos, title, price, condition — and
+fills the real forms on **Facebook Marketplace (+ your groups)**, **WhatsApp chats** and **Yad2**
+through a single, persistently logged-in Chrome window. It is dry-run by default, never invents a
+fact or a selector, never bypasses a CAPTCHA, and asks you for a fresh yes before every Publish
+or Send.
 
 </div>
 
----
+**🚀 [Quick start](#-installation) |
+📸 [UI walkthrough](docs/UI.md) |
+🧪 [Examples](#-examples) |
+🤖 [Claude Code plugin](#-claude-code-plugin) |
+🛡️ [Safety invariants](AGENTS.md)**
 
-## Why Shark
+<img src="docs/media/shark-cli.gif" alt="Shark CLI: doctor, then a dry-run sell that prepares drafts on Facebook and Yad2" width="880">
 
-Selling a used MacBook in Israel means filling the same form three times: Facebook Marketplace (then ticking your groups), a photo + caption in a few WhatsApp chats, and Yad2's Hebrew form with its pick-from-list city/street/type fields. Shark does the typing. **You** keep the decisions:
+<sub>Real session, real sites, nothing published.</sub>
 
-|                                          |                                                                                                  |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 🏖️ **Dry-run by default**                | Every run prepares drafts. Publishing needs `--publish` _and_ a fresh "yes" per destination.     |
-| 🪟 **One shared Chrome, logged in once** | Shark attaches over CDP to its own persistent Chrome (`~/.shark/chrome`). No throwaway browsers. |
-| 🧾 **Never invents facts**               | Title, price, condition, location come from you. Missing? It asks — it never guesses a price.    |
-| 🧩 **Never guesses selectors**           | Unknown page → `needs_mapping` + a sanitized DOM snapshot. No hallucinated clicks.               |
-| 🛑 **Never bypasses a CAPTCHA or login** | Pauses in the same tab, waits for you, resumes. `shark resume <run-id>` if it exited first.      |
-| 🔒 **Never logs secrets**                | No cookies, tokens, passwords, or image bytes in logs, run records or snapshots.                 |
-| 🤖 **Agent-friendly**                    | Ships as a [Claude Code plugin](#claude-code-plugin); `--non-interactive` for scripted drafts.   |
+</div>
 
-## See it work
+## 🎯 When to use Shark
 
-<table>
-<tr>
-<td width="50%" valign="top">
+| You want to…                                                  | Run                                     | You still do                               |
+| ------------------------------------------------------------- | --------------------------------------- | ------------------------------------------ |
+| See exactly what would be posted, everywhere, without posting | `shark sell …` (dry-run is the default) | Nothing — read the drafts                  |
+| Fill a form completely and finish it yourself                 | `shark sell … --draft-only`             | Press Publish in the open tab              |
+| Publish for real, one destination at a time                   | `shark sell … --publish`                | Answer `Submit to … ?` per destination     |
+| Let an AI agent prepare the listing from a chat               | `/shark-sell` in Claude Code            | Approve the plan, answer the final prompts |
+| Pick up after a CAPTCHA, a login, or a closed terminal        | `shark resume <run-id>`                 | Solve the check in the Shark Chrome tab    |
 
-**Yad2 — real form, filled by Shark (`--draft-only`)**
+## 🧩 How Shark compares
 
-<img src="docs/media/shark-yad2.gif" alt="Shark filling the Yad2 publish form: photos, title, type, brand, description, condition, price, address, terms" width="100%">
+| Ability                                              | Copy-paste by hand | Generic "auto-poster" bot | **Shark** |
+| ---------------------------------------------------- | :----------------: | :-----------------------: | :-------: |
+| Fills Facebook Marketplace + groups, WhatsApp, Yad2  |         ✅         |             ~             |    ✅     |
+| Uses your existing logins (no password handling)     |         ✅         |            ❌             |    ✅     |
+| Dry-run first, publish only on explicit approval     |         —          |            ❌             |    ✅     |
+| Refuses to guess price / condition / selectors       |         ✅         |            ❌             |    ✅     |
+| Stops at CAPTCHA / login and resumes from checkpoint |         —          |            ❌             |    ✅     |
+| Excludes photos with serial numbers / IDs            |   if you notice    |            ❌             |    ✅     |
+| Drivable by an AI agent (Claude Code plugin)         |         ❌         |            ❌             |    ✅     |
 
-Photos → title → type (autocomplete) → brand → description → condition → price → pickup address (city/street/house, all pick-from-list) → terms. Stops at **סיום והעלאה** and leaves the tab for you. Personal details are blurred in the recording.
+## 🔄 How it works
 
-</td>
-<td width="50%" valign="top">
+```mermaid
+flowchart LR
+    A[📷 photos + facts] --> B[Master listing]
+    B --> C{Shark Chrome<br/>127.0.0.1:9333}
+    C --> F[Facebook<br/>Marketplace + groups]
+    C --> W[WhatsApp<br/>chats]
+    C --> Y[Yad2<br/>publish form]
+    F & W & Y --> D[draft_ready]
+    D -->|--publish| P{{"Submit to … ? (y/N)"}}
+    P -->|yes| S[published / submitted]
+    P -->|no| K[skipped]
+```
 
-**Terminal — the run summary**
+| Step | What happens                                                                                        | Where it lives                                                |
+| ---- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 1    | Photos are validated; any image you mark `analysis_only` is never uploaded                          | `services/image-sources.ts`, `domain/schemas.ts`              |
+| 2    | Facts come from flags or a short interview — Shark never fills a gap with a guess                   | `commands/sell.ts`, `services/listing-interview.ts`           |
+| 3    | Shark attaches over CDP to the shared **Shark Chrome** (own profile, logged in once)                | `browser/session.ts`                                          |
+| 4    | Each adapter verifies login and page identity, then fills the form — unknown UI → `needs_mapping`   | `platforms/*.ts`, `browser/page-identity.ts`                  |
+| 5    | Per destination: `draft_ready`; with `--publish`, a fresh in-memory approval token gates the click  | `orchestration/sell-orchestrator.ts`, `services/approvals.ts` |
+| 6    | Every step is checkpointed with an idempotency key; CAPTCHA/login → pause, `shark resume` continues | `services/run-store.ts`, `browser/challenge-detector.ts`      |
 
-<img src="docs/media/shark-cli-summary.png" alt="Shark run summary: master listing, per-platform differences, DRY-RUN banner, draft_ready per platform" width="100%">
+## 📦 Installation
 
-One master listing, per-platform differences spelled out, one status per destination. `published`, `draft_ready`, `skipped`, `needs_mapping`, `unknown_submission_state` mean exactly that.
-
-</td>
-</tr>
-</table>
-
-🎬 MP4s: [`shark-cli.mp4`](docs/media/shark-cli.mp4) · [`shark-yad2.mp4`](docs/media/shark-yad2.mp4) — more screens in [docs/UI.md](docs/UI.md).
-
-## Quick start
+Requirements: macOS, Node.js 20+, Google Chrome.
 
 ```bash
 git clone https://github.com/Doringber/theshark-.git && cd theshark-
 npm install
 cp shark.config.example.json shark.config.json   # pickup address, platforms, dryRun
-npm run dev -- doctor                            # Node, Chrome, config, Shark Chrome
-
-npm run dev -- browser                           # opens the shared Shark Chrome
-npm run dev -- auth --platform facebook          # log in once per site, in that window
-npm run dev -- auth --platform whatsapp
-npm run dev -- auth --platform yad2
-
-npm run dev -- sell ~/Desktop/macbook-photos     # interactive: asks only what it can't know
+npm run dev -- doctor
 ```
 
-Or hand it everything up front (great for scripts and agents — still dry-run):
+```
+🦈 Shark Doctor
+  ✅ Node.js: v26.8.2
+  ✅ Playwright: Version 1.63.0
+  ✅ Config: shark.config.json — platforms: facebook, whatsapp, yad2
+  ✅ Google Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+  ✅ Shark Chrome: running (http://127.0.0.1:9333), profile ~/.shark/chrome
+  ✅ Open site tabs: facebook.com, web.whatsapp.com, yad2.co.il
+🦈 All checks passed — ready to sell!
+```
+
+Log in once, in the Shark Chrome window (Shark never sees or stores passwords):
 
 ```bash
-npm run dev -- sell --image front.jpg --image back.jpg \
-  --title "מקבוק אייר 2015" --price 300 --condition good --location "תל אביב" \
-  --description "עובד מצוין, איסוף עצמי" \
+npm run dev -- browser                       # opens / focuses the shared window
+npm run dev -- auth --platform facebook
+npm run dev -- auth --platform whatsapp      # scan the QR in that tab
+npm run dev -- auth --platform yad2
+```
+
+> **Why a separate Chrome?** Since Chrome 136 the browser refuses automation on your default
+> profile, and its own debugging port (9222) is often already taken by it. Shark Chrome is real
+> Google Chrome with its own profile at `~/.shark/chrome` on port `9333`. Sign it into your Google
+> account if you want your bookmarks and passwords there.
+
+## 🧪 Examples
+
+All examples use the same two photos and the same facts. Every command below is **dry-run** unless
+it says `--publish`. Outputs are from real runs (Sep 2026).
+
+### Facebook Marketplace + groups
+
+```bash
+npm run dev -- sell --image photos/macbook-1.jpg --image photos/macbook-2.jpg \
+  --title "מקבוק אייר 2015 13 אינץ'" --price 300 --condition good \
+  --location "מודיעין מכבים רעות" --description "עובד מצוין, סוללה במצב טוב. איסוף עצמי." \
+  --platforms facebook --category "Electronics" \
+  --groups "יד שנייה מודיעין,Modiin Buy & Sell" \
+  --non-interactive
+```
+
+What Shark does on `/marketplace/create/item`: photos → title → price → location → category
+dialog → condition → description ("More details" expanded if collapsed) → **Next** → destination
+step: Marketplace **plus each group you named**, "Boost listing" switched off → stops.
+
+```
+Facebook   draft_ready — Draft prepared — no final action
+
+Next action: No pending action.
+```
+
+Publish for real — one question per destination:
+
+```bash
+npm run dev -- sell … --platforms facebook --groups "יד שנייה מודיעין" --publish --non-interactive
+```
+
+```
+⚡ PUBLISH MODE — submissions will be attempted
+⚠️  You are about to publish to real platforms. Are you sure? (y/N) y
+Submit to facebook → marketplace? (y/N) y
+Submit to facebook → יד שנייה מודיעין? (y/N) y
+
+Facebook   published
+```
+
+A group that doesn't exist on the destination screen is reported as `needs_mapping`, not silently
+dropped. Success is verified by the URL moving to `/marketplace/you` or the "listing is live" text;
+anything else is `unknown_submission_state` and is **never retried automatically**.
+
+### WhatsApp chats and groups
+
+```bash
+npm run dev -- sell --image photos/macbook-1.jpg --image photos/macbook-2.jpg \
+  --title "מקבוק אייר 2015 13 אינץ'" --price 300 --condition good \
+  --location "מודיעין מכבים רעות" --description "עובד מצוין, סוללה במצב טוב. איסוף עצמי." \
+  --platforms whatsapp --wa-to "Family,יד שנייה מודיעין" \
+  --non-interactive
+```
+
+Shark reuses your **existing WhatsApp tab** (WhatsApp allows only one), searches the sidebar for
+each exact chat name, and verifies it exists. Dry-run stops there:
+
+```
+WhatsApp   draft_ready — Draft prepared — no final action
+```
+
+With `--publish`, each chat is a separate approval; a "yes" sends the photos with this caption:
+
+```
+למכירה: מקבוק אייר 2015 13 אינץ'
+מחיר: ₪300
+איסוף: מודיעין מכבים רעות
+
+עובד מצוין, סוללה במצב טוב. איסוף עצמי.
+```
+
+```
+Submit to whatsapp → Family? (y/N) y
+Submit to whatsapp → יד שנייה מודיעין? (y/N) n
+
+WhatsApp   submitted to 1 approved group
+```
+
+If the tab shows the QR code, the run pauses at `awaiting_login`; scan it in Shark Chrome and
+`shark resume <run-id>`.
+
+### Yad2
+
+```bash
+npm run dev -- sell --image photos/macbook-1.jpg --image photos/macbook-2.jpg \
+  --title "מקבוק אייר 2015 13 אינץ'" --price 300 --condition good \
+  --location "מודיעין מכבים רעות" --description "עובד מצוין, סוללה במצב טוב. איסוף עצמי." \
+  --platforms yad2 --yad2-type "מחשבים ניידים" --yad2-brand Apple \
+  --draft-only --non-interactive
+```
+
+<img src="docs/media/shark-yad2.gif" alt="Shark filling the Yad2 publish form" width="720">
+
+On `/publish-ad-products/create`: the "resume draft?" modal is always answered **התחלה מחדש** →
+photos → title → type (autocomplete, Yad2's own category name) → brand → description → condition
+toggle → price → contact card: city / street / house number from `shark.config.json` → terms
+checkbox. `--draft-only` leaves the tab on **סיום והעלאה** for you:
+
+```
+Yad2       draft_ready
+
+Next action: No pending action.
+```
+
+If Yad2 shows its hCaptcha ("Are you for real?"), Shark waits in the same tab:
+
+```
+Yad2       awaiting_human_captcha
+
+Next action: Complete the Yad2 CAPTCHA in Shark Chrome, then run shark resume 32aa036d-….
+```
+
+### All three at once
+
+```bash
+npm run dev -- sell photos/ \
+  --title "מקבוק אייר 2015 13 אינץ'" --price 300 --condition good \
+  --location "מודיעין מכבים רעות" --description "עובד מצוין, סוללה במצב טוב. איסוף עצמי." \
   --platforms facebook,whatsapp,yad2 \
-  --groups "יד שנייה מודיעין" --wa-to "Family" \
+  --category "Electronics" --groups "יד שנייה מודיעין" \
+  --wa-to "Family" \
   --yad2-type "מחשבים ניידים" --yad2-brand Apple \
   --non-interactive
 ```
 
-Ready to go live? Add `--publish` (and `--no-dry-run` if your config forces dry-run). Shark will then ask, per destination, in the terminal:
+```
+══════════════════════════════════════════════════
+📋 MASTER LISTING
+══════════════════════════════════════════════════
+  Title:       מקבוק אייר 2015 13 אינץ'
+  Price:       ₪300
+  Condition:   good
+  Location:    מודיעין מכבים רעות
+  Description: עובד מצוין, סוללה במצב טוב. איסוף עצמי.
+  Images:      2 approved for upload
+══════════════════════════════════════════════════
+📡 Platforms: facebook, whatsapp, yad2
+
+Platform-specific differences (master listing is reused):
+  Facebook  Marketplace listing; category Electronics
+  WhatsApp  Hebrew caption to Family
+  Yad2      Hebrew form; type מחשבים ניידים; brand Apple
+
+🏖️  DRY-RUN MODE — drafts will be prepared, nothing will be published
+Run b335bee0-d1e6-46ca-9afa-0a06bf6269c2
+
+Facebook   draft_ready
+WhatsApp   draft_ready
+Yad2       draft_ready
+
+Next action: No pending action.
+```
+
+### Interactive (no flags)
+
+```bash
+npm run dev -- sell ~/Desktop/macbook-photos
+```
+
+Shark asks only what it cannot know — title, price, condition, city, defects, pickup — shows the
+master listing, lets you edit a field or exclude a photo, then asks which platforms.
+
+### A photo with a serial number
+
+```bash
+npm run dev -- sell --image front.jpg --image back.jpg --image sticker.jpg --analysis-only 2 …
+```
+
+Image `[2]` is marked `analysis_only`: it is never uploaded anywhere, and any identifier on it is
+never reproduced in copy, logs or snapshots.
+
+### Interrupted? Resume
+
+```bash
+npm run dev -- status 32aa036d-3345-4808-a91d-1a053d004af4
+npm run dev -- resume 32aa036d-3345-4808-a91d-1a053d004af4
+```
+
+Resume continues from the last checkpoint. Nothing that was already submitted is submitted twice
+(idempotency keys per destination), and nothing pending is submitted without asking you again.
+
+## 🤖 Claude Code plugin
+
+The repo doubles as a Claude Code plugin (`.claude-plugin/plugin.json`). The `shark-sell` skill
+carries the operating rules and live-site knowledge; `/shark-sell` and `/shark-browser` are slash
+commands.
 
 ```
-Submit to facebook → marketplace?      (y/N)
-Submit to facebook → יד שנייה מודיעין?  (y/N)
-Submit to whatsapp → Family?           (y/N)
-Submit to yad2 → yad2?                 (y/N)
+/plugin marketplace add /path/to/theshark-
+/plugin install shark
 ```
 
-There is no flag that answers those for you — by design.
+```
+/shark-sell ~/Desktop/macbook-photos  מקבוק אייר 2015  300
+```
 
-## Commands
+The agent collects the facts, runs the dry-run, shows the per-destination plan, and — when you say
+go — runs with `--publish`. **The `Submit to … ?` prompts are still answered by you in the
+terminal.** There is deliberately no flag that answers them.
 
-| Command                                  | What it does                                                   |
-| ---------------------------------------- | -------------------------------------------------------------- |
-| `shark sell [folder\|files] [--image …]` | Prepare drafts (dry-run). Interactive unless facts are flagged |
-| `shark sell … --publish`                 | Unlock the approval path; each final click still asks          |
-| `shark sell … --draft-only`              | Fill the form, leave the tab open, never submit                |
-| `shark resume <run-id>`                  | Continue an interrupted run (CAPTCHA, closed terminal)         |
-| `shark status <run-id>`                  | Per-platform status and the next human action                  |
-| `shark browser [--url <url>]`            | Open / focus the shared Shark Chrome                           |
-| `shark auth --platform <name>`           | Open that site's tab for a one-time login                      |
-| `shark inspect --platform <name>`        | Save a sanitized DOM snapshot to `.shark/snapshots/`           |
-| `shark doctor`                           | Environment check (Node, Chrome, CDP, config, open site tabs)  |
-| `shark configure`                        | Remember language, city, pickup text, default platforms        |
+## 📐 Architecture
 
-### `sell` flags
+```
+src/
+├── cli.ts                          # Commander entry point
+├── domain/                         # Zod schemas: Listing, ProductImage, SharkConfig, workflow states
+├── services/                       # approvals (in-memory tokens), run-store, redaction, image sources
+├── browser/
+│   ├── session.ts                  # Attaches to Shark Chrome over CDP (127.0.0.1:9333); launches it if needed
+│   ├── challenge-detector.ts       # CAPTCHA / checkpoint detection — never solves
+│   ├── page-identity.ts            # "Is this the page we mapped?" before acting
+│   └── snapshot.ts                 # Sanitized accessibility-tree capture
+├── orchestration/
+│   └── sell-orchestrator.ts        # Checkpointed per-destination flow, resume, idempotency keys
+└── platforms/
+    ├── facebook-marketplace.ts     # + groups, Boost off
+    ├── whatsapp-web.ts             # single-tab reuse, per-chat approval
+    └── yad2.ts                     # Hebrew form, autocompletes, contact modal
+```
 
-| Flag                                                   | Meaning                                                                        |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `--title --price --description --condition --location` | Listing facts. Condition: `new` `like_new` `good` `fair` `poor`                |
-| `--platforms facebook,whatsapp,yad2`                   | Which platforms to run                                                         |
-| `--category "Electronics"` `--groups "A,B"`            | Facebook category and groups (exact names) to cross-post to                    |
-| `--wa-to "Chat 1,Group 2"`                             | WhatsApp chats/groups (exact names as shown in WhatsApp)                       |
-| `--yad2-type "מחשבים ניידים"` `--yad2-brand Apple`     | Yad2 product type (their category name) and manufacturer                       |
-| `--non-interactive`                                    | Skip the fact interview; requires all facts as flags. Approvals still prompt   |
-| `--draft-only`                                         | Fill and stop; leave the tab open for review                                   |
-| `--publish [--no-dry-run]`                             | Enable final prompts; every destination still needs its own fresh yes          |
-| `--analysis-only 0,2`                                  | Mark image indices as analysis-only (never uploaded — e.g. serial-number shot) |
-| `--cdp <url>`                                          | CDP endpoint (default `http://127.0.0.1:9333`; `none` = legacy own profile)    |
-
-## The shared Shark Chrome
-
-Shark never opens throwaway browsers. Every command attaches over CDP to a single **Shark Chrome** —
-real Google Chrome, its own persistent profile at `~/.shark/chrome`, debug port `127.0.0.1:9333`.
-Log in to Facebook, WhatsApp and Yad2 there **once**; every later run just opens a tab. Closed the
-window? The next command relaunches it. Sign it into your Google account if you want your
-bookmarks and passwords there.
-
-Why not your everyday Chrome? Since Chrome 136 the browser refuses automation on the default
-profile, and Chrome's own debugging port (9222) may already be taken by it — so Shark uses a
-separate profile and a separate port, and fails with a clear message if another Chrome answers.
-
-## Configuration
-
-`shark.config.json` is git-ignored (it holds your pickup address). Start from the example:
+Configuration (`shark.config.json`, git-ignored):
 
 ```json
 {
@@ -160,88 +357,59 @@ separate profile and a separate port, and fails with a clear message if another 
 }
 ```
 
-Yad2 publishes only the city; street and house number stay in the pickup card.
+## 🛡️ Safety model
 
-## Claude Code plugin
+The full list is in [`AGENTS.md`](AGENTS.md) and is enforced by tests that are never weakened.
 
-The repo doubles as a Claude Code plugin (`.claude-plugin/plugin.json`). The `shark-sell` skill
-carries the operating rules and site knowledge; `/shark-sell` and `/shark-browser` are slash
-commands. The agent collects facts, runs the dry-run, shows you the per-destination plan — and
-when you say go, it runs with `--publish` and **you** answer the final prompts in the terminal.
+- **Dry-run is the default.** `--publish` enables the approval path; it is not approval.
+- **One fresh approval per destination**, bound to `(runId, listingId, platform, destination)` with
+  a short TTL — never persisted, reused, or shared.
+- **Uncertain click → `unknown_submission_state`**, never an automatic retry.
+- **No credential handling.** Passwords, cookies, tokens, request headers and image bytes are
+  never logged or stored.
+- **No selector guessing.** Unknown UI → `needs_mapping` + sanitized snapshot in `.shark/snapshots/`.
+- **No CAPTCHA / 2FA / rate-limit bypass**, ever.
 
-```
-/plugin marketplace add /path/to/theshark-
-/plugin install shark
-```
+## 📖 Learn more
 
-## Platform notes (mapped against the live sites, Sep 2026)
+- [docs/UI.md](docs/UI.md) — every screen, with recordings
+- [AGENTS.md](AGENTS.md) — engineering invariants
+- [skills/shark-sell/SKILL.md](skills/shark-sell/SKILL.md) — what the agent knows about each site
+- [shark.config.example.json](shark.config.example.json)
 
-**Facebook Marketplace** — `/marketplace/create/item` → photos, title, price, category (dialog),
-condition, description → Next → destination step: Marketplace + your groups, Boost turned off →
-Publish. Success = URL moves to `/marketplace/you` or "listing is live".
-
-**WhatsApp Web** — reuses your single WhatsApp tab (WhatsApp allows one). Sidebar search →
-exact chat name → Attach → "Photos & videos" → Hebrew caption → Send. Every chat is verified to
-exist before anything is sent.
-
-**Yad2** — `/publish-ad-products/create`, stable `data-testid`s. The "resume draft?" modal is
-always answered with "התחלה מחדש" so an old draft never leaks in. hCaptcha ("Are you for real?")
-pauses the run at `awaiting_human_captcha`; Shark waits in the same tab and never clicks it.
-
-## Safety model
-
-Full invariants live in [`AGENTS.md`](./AGENTS.md). In short:
-
-- `--publish` enables the approval path; it is not approval. Every submit needs a fresh in-memory
-  token bound to `(runId, listingId, platform, destination)` with a short TTL — never persisted,
-  never reused.
-- If a final click may have happened but success is uncertain → `unknown_submission_state`, no
-  automatic retry, ever.
-- Images marked `analysis_only` / `replace_required` are never uploaded; only the exact approved,
-  ordered set is.
-- No selector guessing: unknown UI → `needs_mapping`, browser left open for inspection.
-
-## Architecture
-
-```
-src/
-├── cli.ts                          # Commander entry point
-├── domain/                         # Zod schemas: Listing, ProductImage, SharkConfig, workflow states
-├── services/                       # approvals (in-memory tokens), run-store, redaction, image sources
-├── browser/
-│   ├── session.ts                  # Attaches to Shark Chrome over CDP; launches it if needed
-│   ├── challenge-detector.ts       # CAPTCHA / checkpoint detection (never solves)
-│   ├── page-identity.ts            # "Is this the page we mapped?" before acting
-│   └── snapshot.ts                 # Sanitized accessibility-tree capture
-├── orchestration/
-│   └── sell-orchestrator.ts        # Checkpointed per-destination flow, resume, idempotency keys
-└── platforms/
-    ├── facebook-marketplace.ts     # + groups, Boost off
-    ├── whatsapp-web.ts             # single-tab reuse, per-chat approval
-    └── yad2.ts                     # Hebrew form, autocompletes, contact modal
-```
-
-## Development
+### Development
 
 ```bash
-npm run dev -- <cmd>      # run via tsx
-npm run typecheck         # tsc --noEmit
-npm run lint              # ESLint
-npm run format:check      # Prettier
-npm test                  # Vitest (unit)
-npm run test:integration  # Playwright against local HTML fixtures (localhost:4173)
+npm run dev -- <cmd>       npm run typecheck        npm run lint
+npm run format:check       npm test                 npm run test:integration
 ```
 
-Tests are the contract: safety tests are written first and never weakened to make code pass.
-Fixture tests never touch real platforms; there are no automated live-publish tests.
-CI runs format, lint, typecheck, build, unit and integration on every push and PR.
+Unit tests: Vitest. Integration: Playwright against local HTML fixtures (`localhost:4173`) — no
+real platform is touched and there are no automated live-publish tests. CI runs everything on
+every push and PR.
 
-## Contributing & roadmap
+## 🤝 Community & contributing
 
-Issues and PRs welcome — especially new adapter mappings (a `shark inspect` snapshot attached to
-the issue is the fastest way to get a selector fixed). Ideas on the table: more marketplaces,
-listing templates, and a small local web UI for the review step.
+Issues and PRs welcome. The fastest way to get a selector fixed after a site change is to attach
+the output of `shark inspect --platform <name>` (it is sanitized) to the issue. On the table:
+more marketplaces, listing templates, a small local web UI for the review step.
 
 If Shark saved you an evening of copy-paste, a ⭐ helps others find it.
 
-<div align="center"><sub>Built in Israel 🇮🇱 · MIT</sub></div>
+## ⭐ Star history
+
+<a href="https://star-history.com/#Doringber/theshark-&Date">
+  <img src="https://api.star-history.com/svg?repos=Doringber/theshark-&type=Date" alt="Star history" width="600">
+</a>
+
+## 🇮🇱 בעברית, בקצרה
+
+Shark הוא כלי שורת-פקודה שממלא בשבילך מודעת יד-שנייה אחת ב-**פייסבוק מרקטפלייס (+קבוצות)**,
+ב-**וואטסאפ** וב-**יד2**, דרך חלון כרום אחד שמחובר לחשבונות שלך. כברירת מחדל הוא רק מכין
+טיוטות; הוא לא ממציא מחיר או מצב, לא עוקף קאפצ'ה, ולפני כל פרסום או שליחה — שואל אותך.
+
+```bash
+npm run dev -- sell ~/Desktop/photos --platforms facebook,whatsapp,yad2
+```
+
+<div align="center"><sub>MIT · Built in Israel</sub></div>
