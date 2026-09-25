@@ -45,7 +45,8 @@ or Send.
 | See exactly what would be posted, everywhere, without posting | `shark sell …` (dry-run is the default) | Nothing — read the drafts                  |
 | Fill a form completely and finish it yourself                 | `shark sell … --draft-only`             | Press Publish in the open tab              |
 | Publish for real, one destination at a time                   | `shark sell … --publish`                | Answer `Submit to … ?` per destination     |
-| Let an AI agent prepare the listing from a chat               | `/shark-sell` in Claude Code            | Approve the plan, answer the final prompts |
+| Let Codex prepare a safe listing preview                      | [`$shark-sell`](.agents/skills/shark-sell/SKILL.md) | Review facts, photos, and destinations     |
+| Let Claude Code prepare the listing from a chat               | `/shark-sell`                           | Approve the plan, answer the final prompts |
 | Pick up after a CAPTCHA, a login, or a closed terminal        | `shark resume <run-id>`                 | Solve the check in the Shark Chrome tab    |
 
 ## 🧩 How Shark compares
