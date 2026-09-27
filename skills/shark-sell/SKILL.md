@@ -14,7 +14,7 @@ Help the user prepare a listing they can review and post themselves.
 3. If the repo CLI is available, use it to format and validate the supplied facts:
 
    ```bash
-   node cli/shark.mjs draft \
+   npm run shark -- draft \
      --title "Oak desk" \
      --price 120 \
      --condition good \

@@ -19,9 +19,58 @@ node cli/shark.mjs draft \
 
 The CLI prints a plain text draft. Required facts are title, price, and condition (`new`, `like_new`, `good`, `fair`, or `poor`). Location and details are optional.
 
-## Use the skill
+## Use the skill with an AI assistant
 
-Install or copy [`skills/shark-sell/SKILL.md`](skills/shark-sell/SKILL.md) into your AI assistant's skills directory. Ask the assistant to help write a listing; it will gather missing facts, prepare copy, and help you review it.
+Clone this repo and open its folder in your assistant. Node.js 20+ is needed only if you also want to run the CLI. The skill file is [`skills/shark-sell/SKILL.md`](skills/shark-sell/SKILL.md); copy it to the project skill folder for the assistant you use.
+
+### Claude Code
+
+From the repo root, install the project skill and start Claude Code:
+
+```bash
+mkdir -p .claude/skills/shark-sell
+cp skills/shark-sell/SKILL.md .claude/skills/shark-sell/SKILL.md
+claude .
+```
+
+Ask for a listing draft or invoke `/shark-sell` in Claude Code. Project skills live under `.claude/skills/` and are available to sessions in this repo. See the [Claude Code skills guide](https://code.claude.com/docs/en/skills).
+
+### Codex
+
+From the repo root, install the skill where Codex looks for project skills:
+
+```bash
+mkdir -p .agents/skills/shark-sell
+cp skills/shark-sell/SKILL.md .agents/skills/shark-sell/SKILL.md
+```
+
+Open the repo in Codex, then type `$shark-sell` or ask for help writing a second-hand listing. If the skill does not appear, restart Codex. See the [Codex skills guide](https://developers.openai.com/codex/skills).
+
+### VS Code with GitHub Copilot
+
+From the repo root, install the skill in VS Code's supported project skills folder:
+
+```bash
+mkdir -p .github/skills/shark-sell
+cp skills/shark-sell/SKILL.md .github/skills/shark-sell/SKILL.md
+```
+
+Open the repo in VS Code, open Copilot Chat, and type `/shark-sell` or ask for a listing draft. VS Code also recognizes `.agents/skills/`. See [Use Agent Skills in VS Code](https://code.visualstudio.com/docs/agent-customization/agent-skills).
+
+### Try it
+
+From the repo root, run the CLI with the item facts. The skill can gather these facts with you, draft the description, and help you review the result:
+
+```bash
+npm run shark -- draft \
+  --title "Oak desk" \
+  --price 120 \
+  --condition good \
+  --location "Haifa" \
+  --details "Solid wood; small scratch on top"
+```
+
+The CLI prints a local text draft only. Copy the text you approve and post it yourself.
 
 ## Development
 
