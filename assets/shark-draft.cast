@@ -1,0 +1,4 @@
+{"version":3,"term":{"cols":90,"rows":24},"timestamp":1790537133,"command":"sh assets/record-demo.sh","title":"Shark listing draft","env":{"SHELL":"/bin/zsh"}}
+[0.012, "o", "\u001b[1;32m$\u001b[0m node cli/shark.mjs draft \\\r\n  --title \"Oak desk\" \\\r\n  --price 120 \\\r\n  --condition good \\\r\n  --location Haifa \\\r\n  --details \"Solid wood; small scratch on top\"\r\n"]
+[0.031, "o", "Oak desk\r\nPrice: 120\r\nCondition: good\r\nPickup: Haifa\r\n\r\nSolid wood; small scratch on top\r\n\r\nDraft only — review and post it yourself.\r\n"]
+[2.006, "x", "0"]

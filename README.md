@@ -4,6 +4,8 @@ Shark is a small CLI and AI skill for preparing second-hand listing text. Give i
 
 It does not connect to marketplaces, upload photos, publish listings, or send messages. It does not invent missing product facts.
 
+![Animated terminal demo of Shark preparing a listing draft](assets/shark-draft.gif)
+
 ## Use the CLI
 
 Requires Node.js 20 or newer. No dependencies or account setup are needed.
