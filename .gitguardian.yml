@@ -1,9 +1,0 @@
-# GitGuardian configuration
-# The redaction test suite intentionally contains fake secrets
-# (Bearer tokens, API keys, passwords) to verify the sanitization engine.
-
-paths-ignore:
-  - "tests/unit/redaction.test.ts"
-  - "tests/integration/browser-foundation.test.ts"
-  - "src/services/redaction.ts"
-  - ".env.example"

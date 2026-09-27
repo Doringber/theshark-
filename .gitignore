@@ -1,17 +1,14 @@
 node_modules/
 dist/
-*.tsbuildinfo
-.shark/
-browser-profile/
-*.log
 .env
-.env.local
-
-# Personal config (address etc.)
-shark.config.json
-
-# Test artifacts
-results.json
-test-results/
+.env.*
+!.env.example
+.DS_Store
+*.log
+.shark/
 .vitest/
+test-results/
+results.json
+shark.config.json
 photos/
+drafts/
