@@ -93,6 +93,11 @@ export async function fillYad2Listing(page, facts) {
   });
 
   await dismissYad2Overlays(page);
+  const resume = page.getByRole("button", { name: "חזרה לפרסום" }).first();
+  if (await resume.isVisible().catch(() => false)) {
+    await resume.click().catch(() => {});
+    await page.waitForTimeout(400);
+  }
 
   const login = await detectLoginState(page);
   if (login.state === "login_required" || login.checkpoint) {

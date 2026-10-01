@@ -19,6 +19,8 @@ const facts = {
   details: "Solid wood; small scratch on top",
 };
 
+const VIEWPORT = { width: 1280, height: 900 };
+
 /** @param {import("playwright-core").Page} page */
 async function dismissYad2Resume(page) {
   const resume = page.getByRole("button", { name: "חזרה לפרסום" }).first();
@@ -28,43 +30,60 @@ async function dismissYad2Resume(page) {
   }
 }
 
-/** Redact chat names and message previews before marketing screenshots. */
+/** Blur chat list and history; keep the drafted composer text readable. */
 async function sanitizeWhatsAppForScreenshot(page) {
   await page.evaluate(() => {
     const side = document.querySelector("#pane-side");
-    if (side) {
-      side.querySelectorAll("span[title], [dir='auto']").forEach((el) => {
-        if (el instanceof HTMLElement) {
-          el.textContent = "•••";
-          el.removeAttribute("title");
-        }
-      });
-      side.querySelectorAll("img").forEach((img) => {
-        img.style.visibility = "hidden";
+    if (side instanceof HTMLElement) {
+      side.style.filter = "blur(12px)";
+      side.querySelectorAll("input").forEach((input) => {
+        if (input instanceof HTMLInputElement) input.value = "";
       });
     }
     const main = document.querySelector("#main");
-    if (main) {
-      main.querySelectorAll("span[title], [data-pre-plain-text]").forEach((el) => {
-        if (el instanceof HTMLElement) el.textContent = "•••";
+    if (!(main instanceof HTMLElement)) return;
+
+    const footer = main.querySelector("footer");
+    for (const child of main.children) {
+      if (child instanceof HTMLElement && child !== footer && !child.contains(footer)) {
+        child.style.filter = "blur(10px)";
+      }
+    }
+
+    const header = main.querySelector("header");
+    if (header instanceof HTMLElement) {
+      header.style.filter = "none";
+      header.querySelectorAll("span").forEach((span) => {
+        if (span instanceof HTMLElement) span.textContent = "קבוצת מכירה (דמו)";
       });
-      main.querySelectorAll("img").forEach((img) => {
-        img.style.visibility = "hidden";
+    }
+
+    if (footer instanceof HTMLElement) {
+      footer.style.filter = "none";
+      footer.querySelectorAll("*").forEach((el) => {
+        if (el instanceof HTMLElement) el.style.filter = "none";
       });
     }
   });
-  await page.addStyleTag({
-    content: `
-      #pane-side { filter: blur(6px); }
-      #main [role="row"] { filter: blur(8px); }
-      #main footer { filter: none !important; }
-    `,
-  });
+}
+
+/** @param {import("playwright-core").Page} page */
+async function screenshotFacebookForm(page, outPath) {
+  await page.setViewportSize(VIEWPORT);
+  await page.getByLabel("Title").first().scrollIntoViewIfNeeded().catch(() => {});
+  const moreBtn = page.getByRole("button", { name: /More details/i }).first();
+  if (await moreBtn.isVisible().catch(() => false)) {
+    await moreBtn.click().catch(() => {});
+  }
+  await page.getByLabel("Description").first().scrollIntoViewIfNeeded().catch(() => {});
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: outPath });
 }
 
 /** @param {import("playwright-core").Page} page */
 async function scrollYad2ProductDetails(page) {
   await dismissYad2Resume(page);
+  await page.setViewportSize(VIEWPORT);
   const title = page.getByTestId("text-field-title").first();
   await title.scrollIntoViewIfNeeded().catch(() => {});
   await page.evaluate(() => {
@@ -73,6 +92,27 @@ async function scrollYad2ProductDetails(page) {
     );
     heading?.scrollIntoView({ block: "start" });
   });
+}
+
+/** @param {import("playwright-core").Page} page */
+async function screenshotWhatsAppComposer(page, outPath) {
+  await page.setViewportSize(VIEWPORT);
+  const composer = page.locator("#main footer [role='textbox']").first();
+  await composer.scrollIntoViewIfNeeded().catch(() => {});
+  await page.waitForTimeout(400);
+  await sanitizeWhatsAppForScreenshot(page);
+  await page.screenshot({ path: outPath });
+}
+
+function resolveWhatsAppDemoChat() {
+  const waTo = process.env.SHARK_DEMO_WA_TO?.trim();
+  if (!waTo) {
+    console.error(
+      "Set SHARK_DEMO_WA_TO to an exact WhatsApp sidebar title before capturing (e.g. a selling group you own).",
+    );
+    process.exit(1);
+  }
+  return waTo;
 }
 
 const session = new BrowserSession();
@@ -85,21 +125,16 @@ try {
     console.error("facebook", fb);
     process.exit(1);
   }
-  await fbPage.getByLabel("Title").first().scrollIntoViewIfNeeded().catch(() => {});
-  await fbPage.waitForTimeout(400);
-  await fbPage.screenshot({ path: join(assetsDir, "shark-browser-facebook.png") });
+  await screenshotFacebookForm(fbPage, join(assetsDir, "shark-browser-facebook.png"));
 
+  const waTo = resolveWhatsAppDemoChat();
   const waPage = await session.getPage({ reuseUrlIncludes: "web.whatsapp.com" });
-  const waTo = process.env.SHARK_DEMO_WA_TO?.trim();
   const wa = await prepareWhatsAppListing(waPage, facts, { waTo });
-  if (wa.status !== "session_ready" && wa.status !== "compose_ready") {
+  if (wa.status !== "compose_ready") {
     console.error("whatsapp", wa);
     process.exit(1);
   }
-  await waPage.setViewportSize({ width: 1280, height: 800 });
-  await waPage.waitForTimeout(500);
-  await sanitizeWhatsAppForScreenshot(waPage);
-  await waPage.screenshot({ path: join(assetsDir, "shark-browser-whatsapp.png") });
+  await screenshotWhatsAppComposer(waPage, join(assetsDir, "shark-browser-whatsapp.png"));
 
   const y2Page = await session.getPage({ reuseUrlIncludes: "yad2.co.il" });
   const y2 = await fillYad2Listing(y2Page, facts);

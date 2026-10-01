@@ -25,9 +25,9 @@ Browser tabs after the same run (dry-run — nothing published or sent):
 
 | Facebook Marketplace | WhatsApp Web | Yad2 |
 |---------------------|--------------|------|
-| ![Facebook create listing filled](assets/shark-browser-facebook.png) | ![WhatsApp session ready (chat list redacted for demos)](assets/shark-browser-whatsapp.png) | ![Yad2 product details filled](assets/shark-browser-yad2.png) |
+| ![Facebook create listing filled](assets/shark-browser-facebook.png) | ![WhatsApp draft in composer (chat list blurred)](assets/shark-browser-whatsapp.png) | ![Yad2 product details filled](assets/shark-browser-yad2.png) |
 
-WhatsApp: pass `--wa-to "Exact chat name"` to paste the draft into that chat’s composer; without it, `fill` leaves Web ready and prints `session_ready`.
+WhatsApp: pass `--wa-to "Exact chat name"` to paste the draft into that chat’s composer (same text as `buildWhatsAppMessage` — למכירה, מחיר, איסוף). Demo screenshots require `SHARK_DEMO_WA_TO` when re-capturing; the sidebar is blurred and the header shows a generic label.
 
 Quick draft-only demo (no browser):
 
@@ -136,7 +136,7 @@ With Shark Chrome logged in to Facebook, WhatsApp, and Yad2:
 ```bash
 sh assets/record-demo-browser.sh          # smoke run (all three platforms)
 # Optional: paste draft into a real chat for the WhatsApp screenshot
-export SHARK_DEMO_WA_TO="Exact WhatsApp chat name"
+export SHARK_DEMO_WA_TO="Exact WhatsApp sidebar title (e.g. your selling group)"
 asciinema rec -c "sh assets/record-demo-browser.sh" --overwrite assets/shark-browser.cast
 agg assets/shark-browser.cast assets/shark-browser.gif
 ffmpeg -i assets/shark-browser.gif -movflags faststart -pix_fmt yuv420p assets/shark-browser.mp4
