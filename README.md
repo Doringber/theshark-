@@ -4,17 +4,30 @@ Shark is an AI skill and a small CLI for selling second-hand items. The skill ga
 
 Shark works with Facebook Marketplace and Yad2. For WhatsApp, choose the exact group, chat, or status audience. Dry-run is the default: `fill` stops before Publish/Post. To request a submission, include `--publish` in the skill flow and approve the exact destination immediately before each final action.
 
-### Browser workflow (terminal + live form)
+### End-to-end: Facebook, WhatsApp, and Yad2
 
-![Terminal: draft, browser, check, and fill on Yad2](assets/shark-browser.gif)
+One shared Shark Chrome profile (`~/.shark/chrome`). Log in manually once per site with `auth`, then reuse the session.
+
+```text
+draft  →  browser  →  check (×3)  →  fill facebook  →  fill whatsapp  →  fill yad2
+                              ↓              ↓                  ↓               ↓
+                         logged_in?     form_filled      compose_ready    form_filled
+                                        (no Publish)      (no Send)       (no Post)
+```
+
+![Terminal: full Facebook / WhatsApp / Yad2 run](assets/shark-browser.gif)
 
 <video src="assets/shark-browser.mp4" controls width="720">
   Terminal recording: <a href="assets/shark-browser.mp4">shark-browser.mp4</a>
 </video>
 
-Filled listing form in Shark Chrome (same run; stops before publish):
+Browser tabs after the same run (dry-run — nothing published or sent):
 
-![Yad2 create-ad form after shark fill](assets/shark-browser-form.png)
+| Facebook Marketplace | WhatsApp Web | Yad2 |
+|---------------------|--------------|------|
+| ![Facebook create listing filled](assets/shark-browser-facebook.png) | ![WhatsApp logged in / compose ready](assets/shark-browser-whatsapp.png) | ![Yad2 product details filled](assets/shark-browser-yad2.png) |
+
+WhatsApp: pass `--wa-to "Exact chat name"` to paste the draft into that chat’s composer; without it, `fill` leaves Web ready and prints `session_ready`.
 
 Quick draft-only demo (no browser):
 
@@ -38,8 +51,17 @@ The `draft` command prints plain text only. Optional browser commands open **Sha
 ```bash
 npm install   # playwright-core for browser attach
 npm run shark -- browser
+npm run shark -- auth --platform facebook   # once per site
+npm run shark -- auth --platform whatsapp
 npm run shark -- auth --platform yad2
+npm run shark -- check --platform facebook
 npm run shark -- fill --platform facebook \
+  --title "Oak desk" --price 120 --condition good \
+  --location "Haifa" --details "Solid wood; small scratch on top"
+npm run shark -- fill --platform whatsapp --wa-to "My selling group" \
+  --title "Oak desk" --price 120 --condition good \
+  --details "Solid wood; small scratch on top"
+npm run shark -- fill --platform yad2 \
   --title "Oak desk" --price 120 --condition good \
   --location "Haifa" --details "Solid wood; small scratch on top"
 ```
@@ -109,13 +131,16 @@ The tests run locally with Node's built in test runner.
 
 ### Re-record the browser demo
 
-With Shark Chrome already logged in to Yad2 (or edit `record-demo-browser.sh` for another platform):
+With Shark Chrome logged in to Facebook, WhatsApp, and Yad2:
 
 ```bash
-sh assets/record-demo-browser.sh          # smoke run
+sh assets/record-demo-browser.sh          # smoke run (all three platforms)
+# Optional: paste draft into a real chat for the WhatsApp screenshot
+export SHARK_DEMO_WA_TO="Exact WhatsApp chat name"
 asciinema rec -c "sh assets/record-demo-browser.sh" --overwrite assets/shark-browser.cast
 agg assets/shark-browser.cast assets/shark-browser.gif
 ffmpeg -i assets/shark-browser.gif -movflags faststart -pix_fmt yuv420p assets/shark-browser.mp4
+node assets/capture-e2e-screenshots.mjs   # shark-browser-{facebook,whatsapp,yad2}.png
 ```
 
 ## License

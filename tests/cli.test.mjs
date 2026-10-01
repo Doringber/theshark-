@@ -60,6 +60,7 @@ test("help documents browser session commands", () => {
   assert.match(result.stdout, /shark browser/);
   assert.match(result.stdout, /shark auth/);
   assert.match(result.stdout, /shark fill/);
+  assert.match(result.stdout, /whatsapp/);
 });
 
 test("auth requires a platform", () => {

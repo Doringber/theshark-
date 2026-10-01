@@ -34,16 +34,17 @@ Combines Cursor **Goal** persistence with the Shark CLI browser profile. Cookies
 
    If `state` is `login_required`, go back to step 4. If `checkpoint` is set, stop for CAPTCHA/2FA and let the user finish in the browser.
 
-6. **Fill forms (dry-run default)** after the user approves the draft copy:
+6. **Fill forms (dry-run default)** after the user approves the draft copy — once per destination:
 
    ```bash
-   npm run shark -- fill --platform facebook \
-     --title "..." --price ... --condition good --location "..." --details "..."
+   npm run shark -- fill --platform facebook --title "..." --price ... --condition good --location "..." --details "..."
+   npm run shark -- fill --platform whatsapp --wa-to "Exact chat or group name" --title "..." --price ... --condition good --details "..."
+   npm run shark -- fill --platform yad2 --title "..." --price ... --condition good --location "..." --details "..."
    ```
 
-   Bring the Chrome window to the front, summarize CLI JSON (`form_filled`, `login_required`, `needs_mapping`), and point the user at the open tab. Never click Publish, Post, or Send unless the user included `--publish` in the original request **and** gives fresh approval for that exact destination and text immediately before the click.
+   Bring Chrome to the front, summarize CLI JSON (`form_filled`, `session_ready`, `compose_ready`, `login_required`, `needs_mapping`), and point the user at the open tab. Never click Publish, Post, or Send unless the user included `--publish` in the original request **and** gives fresh approval for that exact destination and text immediately before the click.
 
-7. Repeat steps 5–6 for each destination. Report actual state per destination (draft only, form filled, awaiting approval, unknown).
+7. Repeat steps 5–6 for Facebook, WhatsApp (with explicit `--wa-to`), and Yad2 as requested. Report actual state per destination.
 
 ## Goal completion
 

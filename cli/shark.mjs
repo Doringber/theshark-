@@ -14,7 +14,10 @@ Usage:
   shark browser [--url <https-url>]
   shark auth --platform <facebook|whatsapp|yad2>
   shark check --platform <facebook|whatsapp|yad2>
-  shark fill --platform <facebook|yad2> --title ... --price ... --condition ... [options]
+  shark fill --platform <facebook|whatsapp|yad2> --title ... --price ... --condition ... [options]
+
+Fill options:
+  --wa-to <chat name>     WhatsApp only: exact sidebar title; pastes draft in composer (never Send)
 
 Draft options:
   --location <text>       Pickup area
@@ -33,12 +36,15 @@ The draft command only prints text. Browser commands attach to Shark Chrome
 /** @param {string[]} argv */
 function parseGlobalOpts(argv) {
   const rest = [];
-  /** @type {{ platform?: string, url?: string, cdp?: string }} */
+  /** @type {{ platform?: string, url?: string, cdp?: string, waTo?: string }} */
   const opts = {};
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === "--platform") {
       opts.platform = argv[i + 1];
+      i += 1;
+    } else if (token === "--wa-to") {
+      opts.waTo = argv[i + 1];
       i += 1;
     } else if (token === "--url") {
       opts.url = argv[i + 1];
@@ -84,7 +90,7 @@ async function main() {
       return;
     }
     if (command === "fill") {
-      await runFill(rest, { platform: opts.platform, cdp: opts.cdp });
+      await runFill(rest, { platform: opts.platform, cdp: opts.cdp, waTo: opts.waTo });
       return;
     }
 

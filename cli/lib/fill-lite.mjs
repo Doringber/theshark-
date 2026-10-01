@@ -1,6 +1,8 @@
 import { detectLoginState } from "./login-detect.mjs";
 import { PLATFORMS } from "./platforms.mjs";
 
+export { prepareWhatsAppListing, buildWhatsAppMessage } from "./whatsapp-lite.mjs";
+
 const FB_CONDITION_LABEL = {
   new: "New",
   like_new: "Used - Like New",
