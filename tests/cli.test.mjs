@@ -52,3 +52,34 @@ test("publishing is not a CLI command", () => {
   assert.equal(result.status, 2);
   assert.match(result.stderr, /Unknown command: publish/);
 });
+
+test("help documents browser session commands", () => {
+  const result = run(["--help"]);
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /shark browser/);
+  assert.match(result.stdout, /shark auth/);
+  assert.match(result.stdout, /shark fill/);
+});
+
+test("auth requires a platform", () => {
+  const result = run(["auth"]);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /requires --platform/);
+});
+
+test("fill requires a platform", () => {
+  const result = run([
+    "fill",
+    "--title",
+    "Desk",
+    "--price",
+    "100",
+    "--condition",
+    "good",
+  ]);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /requires --platform/);
+});

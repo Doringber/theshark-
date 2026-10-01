@@ -1,76 +1,100 @@
 #!/usr/bin/env node
 
-const CONDITIONS = ["new", "like_new", "good", "fair", "poor"];
+import { CONDITIONS, makeDraft, parseDraftArgs } from "./lib/draft.mjs";
+import { runBrowser } from "./commands/browser-cmd.mjs";
+import { runAuth } from "./commands/auth-cmd.mjs";
+import { runCheck } from "./commands/check-cmd.mjs";
+import { runFill } from "./commands/fill-cmd.mjs";
 
 function help() {
-  console.log(`Shark — prepare a second-hand listing draft
+  console.log(`Shark — prepare listings and open the shared Shark Chrome profile
 
 Usage:
   shark draft --title <text> --price <amount> --condition <condition> [options]
+  shark browser [--url <https-url>]
+  shark auth --platform <facebook|whatsapp|yad2>
+  shark check --platform <facebook|whatsapp|yad2>
+  shark fill --platform <facebook|yad2> --title ... --price ... --condition ... [options]
 
-Required:
-  --title <text>          Item title
-  --price <amount>        Asking price
-  --condition <condition> ${CONDITIONS.join(" | ")}
-
-Options:
+Draft options:
   --location <text>       Pickup area
   --details <text>        Description using facts you provide
-  --help                  Show this help
 
-This CLI only prints a draft. It never contacts a marketplace or sends it.`);
+Environment:
+  SHARK_CDP_URL           CDP endpoint (default http://127.0.0.1:9333)
+  SHARK_CHROME_BIN        Path to Google Chrome
+
+Conditions: ${CONDITIONS.join(" | ")}
+
+The draft command only prints text. Browser commands attach to Shark Chrome
+(~/.shark/chrome) so you log in once manually; fill stops before publishing.`);
 }
 
-function parseArgs(args) {
-  const values = {};
-  for (let i = 0; i < args.length; i += 1) {
-    const key = args[i];
-    if (!key?.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
-    if (key === "--help") return { help: true };
-    const value = args[i + 1];
-    if (!value || value.startsWith("--")) throw new Error(`Missing value for ${key}`);
-    const field = key.slice(2);
-    if (!["title", "price", "condition", "location", "details"].includes(field)) {
-      throw new Error(`Unknown option: ${key}`);
+/** @param {string[]} argv */
+function parseGlobalOpts(argv) {
+  const rest = [];
+  /** @type {{ platform?: string, url?: string, cdp?: string }} */
+  const opts = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (token === "--platform") {
+      opts.platform = argv[i + 1];
+      i += 1;
+    } else if (token === "--url") {
+      opts.url = argv[i + 1];
+      i += 1;
+    } else if (token === "--cdp") {
+      opts.cdp = argv[i + 1];
+      i += 1;
+    } else {
+      rest.push(token);
     }
-    values[field] = value;
-    i += 1;
   }
-  return values;
+  return { opts, rest };
 }
 
-function makeDraft(facts) {
-  const required = ["title", "price", "condition"];
-  const missing = required.filter((field) => !facts[field]?.trim());
-  if (missing.length) throw new Error(`Required facts missing: ${missing.join(", ")}`);
-  if (!/^\d+(?:\.\d{1,2})?$/.test(facts.price)) {
-    throw new Error("Price must be a positive amount with up to two decimal places.");
-  }
-  if (!CONDITIONS.includes(facts.condition)) {
-    throw new Error(`Condition must be one of: ${CONDITIONS.join(", ")}`);
+async function main() {
+  const [command, ...rawArgs] = process.argv.slice(2);
+  if (command === "--help" || command === "-h" || !command) {
+    help();
+    return;
   }
 
-  const lines = [facts.title, `Price: ${facts.price}`, `Condition: ${facts.condition}`];
-  if (facts.location) lines.push(`Pickup: ${facts.location}`);
-  if (facts.details) lines.push("", facts.details);
-  lines.push("", "Draft only — review and post it yourself.");
-  return lines.join("\n");
-}
+  const { opts, rest } = parseGlobalOpts(rawArgs);
 
-const [command, ...args] = process.argv.slice(2);
-if (command === "--help" || command === "-h" || !command) {
-  help();
-} else if (command !== "draft") {
-  console.error(`Unknown command: ${command}\n`);
-  help();
-  process.exitCode = 2;
-} else {
   try {
-    const facts = parseArgs(args);
-    if (facts.help) help();
-    else console.log(makeDraft(facts));
+    if (command === "draft") {
+      const facts = parseDraftArgs(rest);
+      if (facts.help) help();
+      else console.log(makeDraft(facts));
+      return;
+    }
+    if (command === "browser") {
+      await runBrowser({ url: opts.url });
+      return;
+    }
+    if (command === "auth") {
+      if (!opts.platform) throw new Error("auth requires --platform facebook|whatsapp|yad2");
+      await runAuth({ platform: opts.platform, cdp: opts.cdp });
+      return;
+    }
+    if (command === "check") {
+      if (!opts.platform) throw new Error("check requires --platform facebook|whatsapp|yad2");
+      await runCheck({ platform: opts.platform, cdp: opts.cdp });
+      return;
+    }
+    if (command === "fill") {
+      await runFill(rest, { platform: opts.platform, cdp: opts.cdp });
+      return;
+    }
+
+    console.error(`Unknown command: ${command}\n`);
+    help();
+    process.exitCode = 2;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : "Invalid listing facts");
+    console.error(error instanceof Error ? error.message : "Invalid input");
     process.exitCode = 2;
   }
 }
+
+await main();

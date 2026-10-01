@@ -1,16 +1,28 @@
 # Shark
 
-Shark is an AI skill and a small CLI for selling second-hand items. The skill gathers item facts, writes listing copy, and can fill marketplace forms through the assistant's browser controls. The CLI formats a local draft. Neither invents missing product facts.
+Shark is an AI skill and a small CLI for selling second-hand items. The skill gathers item facts, writes listing copy, and fills marketplace forms in **Shark Chrome** (one manual login per site, session reused from `~/.shark/chrome`). Neither invents missing product facts.
 
-Shark can work with Facebook Marketplace and Yad2. For WhatsApp, choose the exact group, chat, or status audience. Browser control must be available in the assistant; otherwise Shark leaves you with a ready-to-copy draft.
+Shark works with Facebook Marketplace and Yad2. For WhatsApp, choose the exact group, chat, or status audience. Dry-run is the default: `fill` stops before Publish/Post. To request a submission, include `--publish` in the skill flow and approve the exact destination immediately before each final action.
 
-Dry-run is the default. Shark stops before posting or sending. To request a submission, include `--publish` and then approve the exact content and destination immediately before each final action.
+### Browser workflow (terminal + live form)
+
+![Terminal: draft, browser, check, and fill on Yad2](assets/shark-browser.gif)
+
+<video src="assets/shark-browser.mp4" controls width="720">
+  Terminal recording: <a href="assets/shark-browser.mp4">shark-browser.mp4</a>
+</video>
+
+Filled listing form in Shark Chrome (same run; stops before publish):
+
+![Yad2 create-ad form after shark fill](assets/shark-browser-form.png)
+
+Quick draft-only demo (no browser):
 
 ![Animated terminal demo of Shark preparing a listing draft](assets/shark-draft.gif)
 
 ## Use the CLI
 
-Requires Node.js 20 or newer. No dependencies or account setup are needed.
+Requires Node.js 20 or newer. Run `npm install` once for browser attach (`playwright-core`). Google Chrome must be installed for `browser` / `fill`.
 
 ```bash
 node cli/shark.mjs draft \
@@ -21,7 +33,18 @@ node cli/shark.mjs draft \
   --details "Solid wood; small scratch on top"
 ```
 
-The CLI prints a plain text draft only; it does not open a browser or post anything. Required facts are title, price, and condition (`new`, `like_new`, `good`, `fair`, or `poor`). Location and details are optional.
+The `draft` command prints plain text only. Optional browser commands open **Shark Chrome** (profile `~/.shark/chrome`) so you log in once per site and later commands reuse that session. `fill` stops before Publish/Post.
+
+```bash
+npm install   # playwright-core for browser attach
+npm run shark -- browser
+npm run shark -- auth --platform yad2
+npm run shark -- fill --platform facebook \
+  --title "Oak desk" --price 120 --condition good \
+  --location "Haifa" --details "Solid wood; small scratch on top"
+```
+
+Required facts for `draft` / `fill`: title, price, and condition (`new`, `like_new`, `good`, `fair`, or `poor`). Location and details are optional.
 
 ## Use the skill with an AI assistant
 
@@ -83,6 +106,17 @@ npm test
 ```
 
 The tests run locally with Node's built in test runner.
+
+### Re-record the browser demo
+
+With Shark Chrome already logged in to Yad2 (or edit `record-demo-browser.sh` for another platform):
+
+```bash
+sh assets/record-demo-browser.sh          # smoke run
+asciinema rec -c "sh assets/record-demo-browser.sh" --overwrite assets/shark-browser.cast
+agg assets/shark-browser.cast assets/shark-browser.gif
+ffmpeg -i assets/shark-browser.gif -movflags faststart -pix_fmt yuv420p assets/shark-browser.mp4
+```
 
 ## License
 

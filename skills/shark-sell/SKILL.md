@@ -5,7 +5,7 @@ description: Prepare and, when browser controls are available, fill second-hand 
 
 # Shark listing workflow
 
-Take a listing from item facts to platform forms. The CLI formats draft text; browser work uses the host assistant's available UI controls. Do not claim a form was filled or submitted unless the live page confirms it.
+Take a listing from item facts to platform forms. The CLI formats draft text and can attach to **Shark Chrome** (shared profile under `~/.shark/chrome`) for login reuse and form fill. Prefer `npm run shark -- browser`, `auth`, `check`, and `fill` over ad-hoc browsers. Fall back to the host's browser controls only if the CLI cannot run. Do not claim a form was filled or submitted unless the live page or CLI JSON confirms it.
 
 ## Workflow
 
@@ -22,7 +22,7 @@ Take a listing from item facts to platform forms. The CLI formats draft text; br
    ```
 
 3. Show the copy and ask the user to correct it before touching marketplace forms.
-4. For each requested destination, use the host's available browser UI and inspect the live page. Work only from verified labels and visible content; do not guess selectors. Fill the form with approved facts and images. If the page differs from the verified UI or a control is unclear, report `needs_mapping`, leave the browser available for inspection, and stop. If browser control is unavailable, leave a ready-to-copy draft and say why the form could not be filled.
+4. For each requested destination, ensure Shark Chrome is running (`npm run shark -- browser`), log in once if needed (`npm run shark -- auth --platform …`), then `npm run shark -- check --platform …`. Fill with `npm run shark -- fill --platform facebook|yad2` and the same fact flags as `draft`, or inspect the live page via Playwright attach if the UI changed. Work only from verified labels and visible content; do not guess selectors. If the page differs or `fill` returns `needs_mapping`, report it, leave the browser open, and stop. If the CLI is unavailable, use the host browser or leave a ready-to-copy draft and say why.
 5. Default to dry-run. Stop before Publish, Post, Send, or any equivalent final action. Submitting requires `--publish` in the user's request and a fresh interactive approval immediately before each final action. Bind that in-memory approval to the run ID, listing ID, platform, exact destination, and expiry. Show the exact listing text and ordered image set in the approval prompt. `--publish` alone is not approval. Never persist, reuse, or share an approval across destinations.
 6. If a login, QR code, CAPTCHA, 2FA, security check, or unclear destination appears, stop and let the user take over. For WhatsApp, require the user to name the exact group, chat, or status audience; never inspect private message history. If it is unclear whether a final action succeeded, report `unknown_submission_state` and do not retry.
 7. Report each destination's actual state: draft prepared, form filled, awaiting approval, confirmed submitted, or unknown submission state. Do not imply that a draft or form is a published listing.

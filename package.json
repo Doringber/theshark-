@@ -1,7 +1,7 @@
 {
   "name": "shark-listing-helper",
   "version": "1.0.0",
-  "description": "A small CLI and AI skill for preparing second-hand listing drafts",
+  "description": "CLI and AI skills for second-hand listing drafts and lightweight browser assist",
   "type": "module",
   "bin": {
     "shark": "./cli/shark.mjs"
@@ -13,5 +13,8 @@
   "license": "MIT",
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "playwright-core": "^1.63.0"
   }
 }
