@@ -25,7 +25,7 @@ Browser tabs after the same run (dry-run — nothing published or sent):
 
 | Facebook Marketplace | WhatsApp Web | Yad2 |
 |---------------------|--------------|------|
-| ![Facebook create listing filled](assets/shark-browser-facebook.png) | ![WhatsApp logged in / compose ready](assets/shark-browser-whatsapp.png) | ![Yad2 product details filled](assets/shark-browser-yad2.png) |
+| ![Facebook create listing filled](assets/shark-browser-facebook.png) | ![WhatsApp session ready (chat list redacted for demos)](assets/shark-browser-whatsapp.png) | ![Yad2 product details filled](assets/shark-browser-yad2.png) |
 
 WhatsApp: pass `--wa-to "Exact chat name"` to paste the draft into that chat’s composer; without it, `fill` leaves Web ready and prints `session_ready`.
 

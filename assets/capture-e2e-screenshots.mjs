@@ -28,6 +28,40 @@ async function dismissYad2Resume(page) {
   }
 }
 
+/** Redact chat names and message previews before marketing screenshots. */
+async function sanitizeWhatsAppForScreenshot(page) {
+  await page.evaluate(() => {
+    const side = document.querySelector("#pane-side");
+    if (side) {
+      side.querySelectorAll("span[title], [dir='auto']").forEach((el) => {
+        if (el instanceof HTMLElement) {
+          el.textContent = "•••";
+          el.removeAttribute("title");
+        }
+      });
+      side.querySelectorAll("img").forEach((img) => {
+        img.style.visibility = "hidden";
+      });
+    }
+    const main = document.querySelector("#main");
+    if (main) {
+      main.querySelectorAll("span[title], [data-pre-plain-text]").forEach((el) => {
+        if (el instanceof HTMLElement) el.textContent = "•••";
+      });
+      main.querySelectorAll("img").forEach((img) => {
+        img.style.visibility = "hidden";
+      });
+    }
+  });
+  await page.addStyleTag({
+    content: `
+      #pane-side { filter: blur(6px); }
+      #main [role="row"] { filter: blur(8px); }
+      #main footer { filter: none !important; }
+    `,
+  });
+}
+
 /** @param {import("playwright-core").Page} page */
 async function scrollYad2ProductDetails(page) {
   await dismissYad2Resume(page);
@@ -62,7 +96,9 @@ try {
     console.error("whatsapp", wa);
     process.exit(1);
   }
+  await waPage.setViewportSize({ width: 1280, height: 800 });
   await waPage.waitForTimeout(500);
+  await sanitizeWhatsAppForScreenshot(waPage);
   await waPage.screenshot({ path: join(assetsDir, "shark-browser-whatsapp.png") });
 
   const y2Page = await session.getPage({ reuseUrlIncludes: "yad2.co.il" });
