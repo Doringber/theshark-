@@ -11,7 +11,7 @@ function help() {
 
 Usage:
   shark draft --title <text> --price <amount> --condition <condition> [options]
-  shark browser [--url <https-url>]
+  shark browser [--url <https-url>] [--cdp <url>]
   shark auth --platform <facebook|whatsapp|yad2>
   shark check --platform <facebook|whatsapp|yad2>
   shark fill --platform <facebook|whatsapp|yad2> --title ... --price ... --condition ... [options]
@@ -25,6 +25,7 @@ Draft options:
 
 Environment:
   SHARK_CDP_URL           CDP endpoint (default http://127.0.0.1:9333)
+  --cdp                   Override the endpoint for browser/auth/check/fill
   SHARK_CHROME_BIN        Path to Google Chrome
 
 Conditions: ${CONDITIONS.join(" | ")}
@@ -76,7 +77,7 @@ async function main() {
       return;
     }
     if (command === "browser") {
-      await runBrowser({ url: opts.url });
+      await runBrowser({ url: opts.url, cdp: opts.cdp });
       return;
     }
     if (command === "auth") {
