@@ -66,6 +66,27 @@ npm run shark -- fill --platform yad2 \
   --location "Haifa" --details "Solid wood; small scratch on top"
 ```
 
+### Connect your browser session
+
+Run these commands on the computer where Google Chrome is installed. `browser` starts a separate Shark Chrome profile; `auth` opens the selected site in that same profile. Complete login or scan the WhatsApp QR code in the open Chrome window, then run `check` to confirm the session before `fill`.
+
+```bash
+npm run shark -- browser
+npm run shark -- auth --platform whatsapp
+# Scan the QR code in the Shark Chrome window with your phone.
+npm run shark -- check --platform whatsapp
+```
+
+For a Chrome instance that already exposes a CDP endpoint to this computer, pass its URL to every command or set `SHARK_CDP_URL`. `browser` will connect to that endpoint without starting another Chrome profile. Keep the CDP endpoint private; it grants control over that browser and its signed-in sessions.
+
+```bash
+npm run shark -- browser --cdp http://127.0.0.1:9333
+npm run shark -- auth --platform facebook --cdp http://127.0.0.1:9333
+npm run shark -- check --platform facebook --cdp http://127.0.0.1:9333
+```
+
+A browser in another app or a hosted browser can be used here only if it provides a reachable CDP endpoint. Signing in there does not sign in Shark Chrome automatically.
+
 Required facts for `draft` / `fill`: title, price, and condition (`new`, `like_new`, `good`, `fair`, or `poor`). Location and details are optional.
 
 ## Use the skill with an AI assistant
