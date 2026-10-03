@@ -16,7 +16,7 @@ export async function runAuth(opts) {
   await focusChromeWindow();
 
   console.log("Opened a tab in Shark Chrome.");
-  console.log("Log in manually in that window (once). Sessions stay in ~/.shark/chrome.");
+  console.log("Log in manually in that window (once). The session stays in that browser's profile.");
   console.log("Shark detaches and leaves your tabs open.\n");
 
   await session.detach();

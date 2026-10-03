@@ -1,4 +1,5 @@
 import {
+  cdpAlive,
   ensureSharkChrome,
   focusChromeWindow,
   openCdpTab,
@@ -7,9 +8,21 @@ import {
   SHARK_CDP_URL,
 } from "../lib/shark-chrome.mjs";
 
-/** @param {{ url?: string }} opts */
+/** @param {string | undefined} selected @param {{ alive: typeof cdpAlive, launch: typeof ensureSharkChrome }} dependencies */
+export async function resolveBrowserEndpoint(selected, dependencies = { alive: cdpAlive, launch: ensureSharkChrome }) {
+  if (selected) {
+    if (!(await dependencies.alive(selected))) {
+      throw new Error(`Cannot reach Chrome CDP at ${selected}. Start that browser or remove --cdp / SHARK_CDP_URL to launch Shark Chrome locally.`);
+    }
+    return selected;
+  }
+  return dependencies.launch();
+}
+
+/** @param {{ url?: string, cdp?: string }} opts */
 export async function runBrowser(opts = {}) {
-  const cdp = await ensureSharkChrome();
+  const selected = opts.cdp ?? process.env.SHARK_CDP_URL?.trim();
+  const cdp = await resolveBrowserEndpoint(selected);
   if (!cdp) {
     console.error(`Google Chrome not found (tried: ${resolveChromeBin()})`);
     console.error("Set SHARK_CHROME_BIN to your Chrome executable path.");
@@ -20,6 +33,6 @@ export async function runBrowser(opts = {}) {
   await focusChromeWindow();
   console.log("Shark Chrome is running");
   console.log(`  CDP:     ${cdp || SHARK_CDP_URL}`);
-  console.log(`  Profile: ${SHARK_CHROME_DIR}`);
-  console.log("  Log in once per site here; later commands reuse this profile.");
+  if (!selected) console.log(`  Profile: ${SHARK_CHROME_DIR}`);
+  console.log("  Log in once per site here; later commands reuse this browser session.");
 }
