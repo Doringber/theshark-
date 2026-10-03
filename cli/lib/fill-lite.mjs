@@ -41,10 +41,7 @@ export async function fillFacebookListing(page, facts) {
     const locationField = page.getByLabel("Location").first();
     if (await locationField.isVisible().catch(() => false)) {
       await locationField.fill(facts.location);
-      const suggestion = page.locator('[role="option"], [role="menuitem"]').first();
-      if (await suggestion.isVisible().catch(() => false)) {
-        await suggestion.click();
-      }
+      // The host must inspect suggestions and choose the matching location.
     }
   }
 
@@ -68,7 +65,11 @@ export async function fillFacebookListing(page, facts) {
   }
 
   await page.bringToFront().catch(() => {});
-  return { status: "form_filled", platform: "facebook" };
+  return verifyFilledFields("facebook", [
+    ["title", title, facts.title],
+    ["price", page.getByLabel("Price").first(), facts.price],
+    ["description", descInput, description],
+  ], ["condition", "category", "location", "photos"]);
 }
 
 /**
@@ -80,10 +81,6 @@ async function dismissYad2Overlays(page) {
   if (await cookieBtn.isVisible().catch(() => false)) {
     await cookieBtn.click().catch(() => {});
   }
-  const restart = page.getByRole("button", { name: "התחלה מחדש" }).first();
-  if (await restart.isVisible().catch(() => false)) {
-    await restart.click().catch(() => {});
-  }
 }
 
 export async function fillYad2Listing(page, facts) {
@@ -93,10 +90,10 @@ export async function fillYad2Listing(page, facts) {
   });
 
   await dismissYad2Overlays(page);
+  const restart = page.getByRole("button", { name: "התחלה מחדש" }).first();
   const resume = page.getByRole("button", { name: "חזרה לפרסום" }).first();
-  if (await resume.isVisible().catch(() => false)) {
-    await resume.click().catch(() => {});
-    await page.waitForTimeout(400);
+  if (await restart.isVisible().catch(() => false) || await resume.isVisible().catch(() => false)) {
+    return { status: "blocked", platform: "yad2", reason: "Existing draft detected; choose whether to resume or replace it before filling" };
   }
 
   const login = await detectLoginState(page);
@@ -127,5 +124,27 @@ export async function fillYad2Listing(page, facts) {
   }
 
   await page.bringToFront().catch(() => {});
-  return { status: "form_filled", platform: "yad2", note: "Category/type may still need manual input" };
+  return verifyFilledFields("yad2", [
+    ["title", title, facts.title],
+    ["description", textArea, facts.details?.trim() || facts.title],
+    ["price", priceInput, facts.price],
+  ], ["condition", "category", "location", "photos"]);
+}
+
+// Read back values: a successful click or fill is not proof of a complete listing.
+async function verifyFilledFields(platform, fields, unresolved) {
+  const verifiedFields = [];
+  const missingFields = [...unresolved];
+  for (const [name, locator, expected] of fields) {
+    const actual = await locator.inputValue().catch(() => undefined);
+    if (actual === expected) verifiedFields.push(name);
+    else missingFields.push(name);
+  }
+  return {
+    status: missingFields.length ? "partial_fill" : "form_filled",
+    platform,
+    verifiedFields,
+    missingFields,
+    note: "Review the live form and complete missing fields with the host browser or manually. No photos uploaded; nothing published.",
+  };
 }
