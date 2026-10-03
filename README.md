@@ -33,6 +33,23 @@ Quick draft-only demo (no browser):
 
 ![Animated terminal demo of Shark preparing a listing draft](assets/shark-draft.gif)
 
+## Sell directly from ChatGPT Work
+
+Use the installed `shark-sell` skill and provide the item facts, ordered photos, and destinations in this chat. The repo skill supports the hosted browser directly; the local CLI is optional. If the skill is already installed, read its current instructions before using it. A GitHub connection alone does not install the skill or authenticate marketplace accounts.
+
+Example request:
+
+> Use Shark to sell my desk. Price: ₪120. Condition: good. Pickup: Haifa. Details: small scratch on top. Use these attached photos in order. Prepare Facebook Marketplace and Yad2 drafts, and a WhatsApp draft in the exact group “My selling group”.
+
+Shark reviews the copy with you, opens each requested site, resolves sign-in using the host's secure authentication flow, fills fields from the live page, uploads only approved photos through supported host upload controls, and reads back the result. If upload or sign-in is unavailable, it reports the blocker and preserves useful work. It stops before publishing or sending. Requesting submission with `--publish` still requires fresh approval of each destination, exact text, and ordered photos.
+
+| Backend | Form support | Photos | Authentication |
+| --- | --- | --- | --- |
+| ChatGPT Work browser + skill | Live page inspection; site-specific required fields | Approved photos through the host upload flow, if available | Secure host sign-in / documented handoff per site |
+| Local CLI + Shark Chrome | A subset of fields; read-back verification and `partial_fill` for gaps | No photo-upload CLI option | Manual login in Shark Chrome |
+
+The CLI reports `verifiedFields` and `missingFields` for marketplace fills. `partial_fill`, `needs_mapping`, or `blocked` exits with code 3; login-required exits with code 2. Category, condition, location selection, and photos still require host-browser or manual completion. Yad2 existing drafts are preserved until you choose how to proceed. Demo images illustrate an earlier run and do not prove current site compatibility.
+
 ## Use the CLI
 
 Requires Node.js 20 or newer. Run `npm install` once for browser attach (`playwright-core`). Google Chrome must be installed for `browser` / `fill`.
@@ -85,7 +102,7 @@ npm run shark -- auth --platform facebook --cdp http://127.0.0.1:9333
 npm run shark -- check --platform facebook --cdp http://127.0.0.1:9333
 ```
 
-A browser in another app or a hosted browser can be used here only if it provides a reachable CDP endpoint. Signing in there does not sign in Shark Chrome automatically.
+The local CLI connects only to Shark Chrome or an explicitly supplied reachable CDP endpoint. ChatGPT Work uses its own documented browser controls directly through the skill; no CDP endpoint or local Chrome is needed. Sessions are separate, so logging in to GitHub or local Chrome does not log in to marketplaces in the hosted browser.
 
 Required facts for `draft` / `fill`: title, price, and condition (`new`, `like_new`, `good`, `fair`, or `poor`). Location and details are optional.
 
