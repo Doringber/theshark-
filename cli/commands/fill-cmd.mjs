@@ -52,7 +52,7 @@ export async function runFill(args, opts) {
     console.log(stopLine);
 
     if (result.status === "login_required") process.exitCode = 2;
-    else if (result.status === "needs_mapping") process.exitCode = 3;
+    else if (["needs_mapping", "partial_fill", "blocked"].includes(result.status)) process.exitCode = 3;
   } finally {
     await session.detach();
   }

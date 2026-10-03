@@ -8,6 +8,7 @@ const LOGIN_INDICATORS = [
   '[aria-label="QR Code"]',
   '[data-testid="qr-code"]',
   'input[type="password"]',
+  'input[name="email"]',
   '[aria-label="התחברות"]',
   '[aria-label="סיסמה"]',
 ];
@@ -24,6 +25,9 @@ const CHECKPOINT_INDICATORS = [
   '[aria-label="CAPTCHA"]',
   '[aria-label="Security check"]',
   'iframe[src*="captcha"]',
+  'iframe[src*="recaptcha"]',
+  'iframe[src*="hcaptcha"]',
+  'iframe[src*="challenges.cloudflare.com"]',
   '[data-testid="captcha"]',
 ];
 

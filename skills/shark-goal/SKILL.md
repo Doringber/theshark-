@@ -5,7 +5,9 @@ description: Pursue a selling objective to completion with /goal durability—dr
 
 # Shark goal workflow
 
-Combines Cursor **Goal** persistence with the Shark CLI browser profile. Cookies and sessions live in `~/.shark/chrome` (Chrome user data). Never export, log, or paste cookies or tokens into chat.
+Follow [shark-sell](../shark-sell/SKILL.md) for backend selection, authentication, photos, live verification, and final-action approval. In ChatGPT Work, use the hosted browser directly; do not launch local Chrome or request a CDP URL. Use the steps below only with local Shark Chrome.
+
+Use Cursor Goal persistence only when its goal skill and CreateGoal/UpdateGoal tools are available. Otherwise pursue the objective in the current conversation without inventing those tools. Cookies and sessions for the local backend live in `~/.shark/chrome`. Never export, log, or paste cookies or tokens into chat.
 
 ## When the user sends `/goal …` for selling
 
@@ -48,7 +50,7 @@ Combines Cursor **Goal** persistence with the Shark CLI browser profile. Cookies
 
 ## Goal completion
 
-Before `UpdateGoal` with status `complete`, verify every deliverable in the objective: draft shown, browser opened, login reused or completed, forms filled or `needs_mapping` explained with tab left open, user shown the result. Unchecked items mean the goal stays active.
+Before `UpdateGoal` with status `complete`, verify every deliverable in the objective: draft shown, browser opened, login reused or completed, forms and photos verified, or each blocker explained with the actual partial state and tab preserved, user shown the result. Unchecked items mean the goal stays active.
 
 ## Safety
 
