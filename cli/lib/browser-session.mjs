@@ -28,10 +28,12 @@ export class BrowserSession {
   async launch() {
     if (this.#context) return this.#context;
 
-    const cdpUrl =
-      this.#options.cdpUrl === "none"
-        ? ""
-        : this.#options.cdpUrl || (await ensureSharkChrome()) || "";
+    const selected = this.#options.cdpUrl;
+    const cdpUrl = selected === "none"
+      ? ""
+      : selected && selected !== SHARK_CDP_URL
+        ? selected
+        : (await ensureSharkChrome()) || "";
     if (!cdpUrl) {
       throw new Error(
         "Shark Chrome is not running and Google Chrome was not found. Run `shark browser` first.",
